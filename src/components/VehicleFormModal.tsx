@@ -2255,505 +2255,129 @@ const VehicleFormModal = ({
                         </div>
                     </div>
 
-                    {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
-                    <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
-
-                        <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-4 mt-[-1rem] md:mt-[-1.5rem]">
-                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
-                                <span>買車本金 <span className="font-bold text-red-600">{formatCurrency(baseCost)}</span></span>
-                                <span className="text-slate-300">+</span>
-                                <span>維修雜費 <span className="font-bold text-red-500">{formatCurrency(totalExpenses)}</span></span>
-                                <span className="text-slate-300">=</span>
-                                <span className="text-red-800 font-black text-sm md:text-base ml-1">總成本: {formatCurrency(totalCostAll)}</span>
-                            </div>
-                            
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-medium">
-                                {hasFullAccess && (
-                                    <span className={`font-bold ${netProfit > 0 ? 'text-emerald-600' : 'text-red-600'} flex items-center pr-3 border-r border-slate-200`}>
-                                        利潤: {formatCurrency(netProfit)}
-                                    </span>
-                                )}
-                                <span className="text-emerald-700 font-bold">總已付: {formatCurrency(totalPaidAll)}</span>
-                                <span className={`font-black ml-1 ${acqBalance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                                    總欠款: {formatCurrency(acqBalance)}
-                                </span>
-                            </div>
-                        </div>
-                        {/* 進貨詳情區塊 */}
-                        <div className="bg-red-50/40 p-4 md:p-5 rounded-xl border border-red-100 shadow-sm w-full">
-                            
-                            {/* ★ 排版升級：將「歸屬下拉」完美融入頂部 */}
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-3 border-b border-red-100 gap-4 md:gap-2">
-                                <h3 className="font-bold text-red-800 text-base md:text-sm flex items-center"><DownloadCloud size={18} className="mr-2"/> 進貨與收車設定</h3>
-                                <div className="flex flex-wrap items-center gap-3 md:gap-4 w-full md:w-auto">
-                                    
-                                    {/* ★ 新增：歸屬下拉選單 (自家盤 | 寄賣 | 行家盤) */}
-                                    <div className="flex items-center gap-2 bg-white px-2 py-1.5 md:py-1 rounded-lg border border-red-200 shadow-sm">
-                                        <span className="text-xs md:text-[10px] text-indigo-500 font-bold uppercase">車輛歸屬:</span>
-                                        <select name="sourceType" value={sourceType} onChange={e => setSourceType(e.target.value as any)} className="bg-transparent text-sm md:text-xs font-black outline-none cursor-pointer text-indigo-700">
-                                            <option value="own">🟢 自家盤</option>
-                                            <option value="consignment">🔵 寄賣</option>
-                                            <option value="partner">🟠 行家盤</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs md:text-[10px] text-red-400 font-bold uppercase">狀態分類:</span>
-                                        <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="text-sm md:text-xs bg-white border border-red-200 rounded-lg md:rounded p-2 md:p-1 outline-none text-red-700 font-bold shadow-sm">
-                                            <option value="Used">二手 (Used)</option>
-                                            <option value="New">新車 (New)</option>
-                                            <option value="Consignment">寄賣 (Consign)</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex items-center gap-2 bg-white px-3 md:px-2 py-2 md:py-1 rounded-lg border border-red-200 shadow-sm">
-                                        <span className="text-xs md:text-[10px] font-bold text-red-500">表單模式:</span>
-                                        <select name="acq_type" value={acqType} onChange={e => setAcqType(e.target.value as any)} className="bg-transparent text-red-800 text-base md:text-sm font-bold outline-none cursor-pointer">
-                                            <option value="Local">本地收車 (Local)</option>
-                                            <option value="Import">國外訂車 (Import)</option>
-                                        </select>
+                    {/* 📌 進貨付款紀錄 (Acquisition Payments) */}
+                            <div className="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden mb-5 mt-6">
+                                <div className="px-3.5 py-2 bg-red-50/80 border-b border-red-100 flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className="font-bold text-red-800 text-xs flex items-center">進貨付款紀錄 (Acquisition Payments)</h3>
+                                    <div className="flex gap-2 items-center">
+                                        <span className="text-[10px] font-bold text-red-700 bg-white px-2 py-0.5 rounded shadow-sm border border-red-200">總已付: {formatCurrency(totalAcqPaid)}</span>
+                                        <button type="button" onClick={handleOpenReconModal} className="bg-white text-red-600 hover:bg-red-600 hover:text-white border border-red-200 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors flex items-center gap-1"><Printer size={12}/> 對數單</button>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* ★ 智能 Datalist 放喺外層，等 Local 同 Import 都可以共用！ */}
-                            <datalist id="vendor_list">
-                                {sourceType === 'partner' 
-                                    ? (settings?.partners || []).map((p: string) => <option key={p} value={p} />)
-                                    : (settings?.expenseCompanies || []).map((c: string) => <option key={c} value={c} />)
-                                }
-                            </datalist>
-
-                            {/* 國外訂車表單 */}
-                            {acqType === 'Import' ? (
-                                <div className="space-y-4 md:space-y-4">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div className="sm:col-span-2">
-                                            <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label>
-                                            <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm" placeholder="供應商 / 拍賣場名稱"/>
-                                            <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
-                                        </div>
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-sm md:text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono shadow-sm font-bold text-slate-700"/></div>
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-sm md:text-xs outline-none font-bold text-slate-700 shadow-sm"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
-                                    </div>
-
-                                    {/* 外幣與當地費用 */}
-                                    <div className="bg-white p-4 md:p-3 rounded-xl md:rounded-lg border border-red-100 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-3 w-full">
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Currency</label><select name="acq_currency" defaultValue={(v as any).acquisition?.currency || 'JPY'} className="w-full bg-slate-50 border border-red-100 p-3 md:p-2 rounded-lg text-base md:text-sm outline-none font-bold"><option value="JPY">日圓 (JPY)</option><option value="GBP">英鎊 (GBP)</option><option value="EUR">歐元 (EUR)</option><option value="RMB">人民幣 (RMB)</option><option value="USD">美金 (USD)</option></select></div>
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Foreign Price (外幣車價)</label><input name="acq_foreignPrice" value={acqForeignPrice} onChange={e=>setAcqForeignPrice(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border border-red-100 p-3 md:p-2 rounded-lg text-base md:text-sm outline-none font-mono text-right font-bold text-slate-800" placeholder="0"/></div>
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Local Charges (當地費用)</label><input name="acq_localChargesForeign" value={acqLocalChargesForeign} onChange={e=>setAcqLocalChargesForeign(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border border-red-100 p-3 md:p-2 rounded-lg text-base md:text-sm outline-none font-mono text-right" placeholder="0"/></div>
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Rate (當時匯率)</label><input name="acq_exchangeRate" value={acqExchangeRate} onChange={e=>setAcqExchangeRate(e.target.value)} className="w-full bg-slate-50 border border-red-100 p-3 md:p-2 rounded-lg text-base md:text-sm outline-none font-mono text-right" placeholder="0.051"/></div>
-                                    </div>
-
-                                    {/* 港幣成本與海關稅金 */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end w-full">
-                                        <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Port Fee (到港雜費 HKD)</label><div className="flex items-center bg-white border border-red-200 rounded-lg px-2"><span className="text-gray-400 font-mono text-base md:text-sm">$</span><input name="acq_portFee" value={acqPortFee} onChange={e=>setAcqPortFee(formatNumberInput(e.target.value))} className="w-full p-3 md:p-2 text-base md:text-sm outline-none font-mono text-right font-bold"/></div></div>
-                                        <div>
-                                            <label className="block text-xs md:text-[10px] text-gray-500 font-bold mb-1 uppercase">Cost excl. Tax (未含稅成本)</label>
-                                            <div className="bg-gray-100 border border-gray-300 p-3 md:p-2 rounded-lg text-base md:text-sm text-right font-mono font-bold text-gray-600">${acqCostExclTax}</div>
-                                        </div>
-                                        
-                                        <div className="bg-red-50 p-3 md:p-2 rounded-lg border border-red-300 shadow-inner">
-                                            <label className="block text-xs md:text-[10px] text-red-600 font-bold mb-1 uppercase">A1 (海關 PRP 費用 HKD)</label>
-                                            <input name="acq_a1Price" value={acqA1Price} onChange={e=>setAcqA1Price(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-200 p-2 md:p-1.5 rounded-lg text-base md:text-sm outline-none font-mono text-right font-black text-red-700" placeholder="0"/>
-                                        </div>
-                                        <div className="bg-red-50 p-3 md:p-2 rounded-lg border border-red-200 shadow-inner">
-                                            <label className="block text-xs md:text-[10px] text-red-600 font-bold mb-1 uppercase">FRT (入口稅 HKD)</label>
-                                            <input name="acq_frtTax" value={acqFrtTax} readOnly className="w-full bg-transparent border-b border-red-300 p-1 text-base md:text-sm outline-none font-mono text-right font-black text-red-800" placeholder="Auto Calc"/>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex flex-col sm:flex-row justify-between items-end pt-4 border-t border-red-200 w-full gap-4">
-                                        <div className="text-xs font-bold text-red-500/80 bg-red-50 px-3 py-2 rounded-lg border border-red-100 flex items-center">
-                                            <Wrench size={14} className="mr-1.5"/>
-                                            維修與雜費成本: {formatCurrency(totalExpenses)}
-                                        </div>
-                                        <div className="text-right w-full sm:w-auto">
-                                            <span className="text-xs md:text-[10px] text-red-500 font-bold uppercase block mb-1">Total HKD Cost (港幣總成本)</span>
-                                            <div className="flex items-center justify-end bg-white border-2 border-red-200 p-2 rounded-xl shadow-sm">
-                                                <span className="text-red-700 font-mono text-2xl mr-1 font-black">$</span>
-                                                {/* ★ 智能總計：包含(未含稅成本 + 稅金) 或 (收車價) + 維修雜費 */}
-                                                <span className="bg-transparent text-3xl md:text-2xl font-mono font-black text-red-700 text-right w-full sm:w-auto min-w-0">
-                                                    {(() => {
-                                                        const baseCost = Number(costStr.replace(/,/g, '')) || 0;
-                                                        // 解決 JS 浮點數誤差 (0.1+0.2=0.30000000004)
-                                                        const finalTotal = Math.round((baseCost + totalExpenses) * 100) / 100;
-                                                        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(finalTotal);
-                                                    })()}
-                                                </span>
-                                                {/* 隱藏的 Input 為了給 saveVehicle 讀取 */}
-                                                <input type="hidden" name="costPrice" value={Number(costStr.replace(/,/g, '')) || 0} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
-                                {/* ★★★ 本地收車表單 ★★★ */}
-                                <div className="sm:col-span-2">
-                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner (前車主/行家)</label>
-                                    <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder="收車對象名稱"/>
-                                </div>
-                                <div className="col-span-1 w-full min-w-0">
-                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor ID (身份證/BR)</label>
-                                    <input name="acq_vendorID" defaultValue={(v as any).acquisition?.vendorID || ''} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm font-mono min-w-0" placeholder="證件號碼"/>
-                                </div>
-                                <div className="col-span-1 w-full min-w-0">
-                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor Phone (聯絡電話)</label>
-                                    <input name="acq_vendorPhone" defaultValue={(v as any).acquisition?.vendorPhone || ''} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm font-mono min-w-0" placeholder="電話號碼"/>
-                                </div>
-                                
-                                <div className="sm:col-span-4 border-t border-red-100 pt-3"></div>
-
-                                <div className="sm:col-span-2">
-                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label>
-                                    <select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none font-bold text-slate-700 shadow-sm min-w-0">
-                                        <option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option>
-                                    </select>
-                                </div>
-
-                                    <div className="bg-red-100/80 p-3 md:p-2 rounded-xl md:rounded border-2 border-red-300 sm:col-span-2 shadow-inner w-full min-w-0 flex flex-col justify-between">
-                                        <label className="block text-xs md:text-[10px] text-red-800 font-black mb-1 uppercase">Purchase Price (收車本金 HKD)</label>
-                                        <div className="flex items-center mb-2"><span className="text-red-700 font-mono text-xl mr-1 font-black">$</span><input value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="w-full bg-white p-1.5 rounded text-lg outline-none font-mono font-black text-red-800 shadow-sm min-w-0" placeholder="0"/></div>
-                                        
-                                        <div className="border-t border-red-200/50 pt-2 flex justify-between items-center mt-auto">
-                                            <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">Total HKD Cost (港幣總成本)</span>
-                                            <span className="text-red-700 font-mono text-xl font-black">
-                                                ${(() => {
-                                                    const baseCost = Number(costStr.replace(/,/g, '')) || 0;
-                                                    const finalTotal = Math.round((baseCost + totalExpenses) * 100) / 100;
-                                                    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(finalTotal);
-                                                })()}
-                                            </span>
-                                            <input type="hidden" name="costPrice" value={Number(costStr.replace(/,/g, '')) || 0} />
-                                        </div>
-                                    </div>
-                                    
-                                    {/* ★★★ 升級：對數與代支連動系統 ★★★ */}
-                                    <div className="w-full min-w-0">
-                                        <div className="flex justify-between items-end mb-1">
-                                            <label className="block text-xs md:text-[10px] text-red-500 font-bold uppercase">Offset Amount (對數 HKD)</label>
-                                            <select 
-                                                value={acqOffsetDocId}
-                                                onChange={(e) => {
-                                                    const docId = e.target.value;
-                                                    setAcqOffsetDocId(docId);
-                                                    if (docId) {
-                                                        const selectedDoc = allSalesDocs?.find((d:any) => d.id === docId);
-                                                        if (selectedDoc) {
-                                                            // ★★★ 原本的錯誤邏輯：帶入了新車的總價
-                                                            // const basePrice = Number(selectedDoc.formData?.price) || 0;
-                                                            // const extrasTotal = (selectedDoc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
-                                                            // setAcqOffsetStr(formatNumberInput(String(basePrice + extrasTotal)));
-                                                            
-                                                            // ★★★ 修正後的防呆邏輯：只帶入當前這台舊車的收車本金
-                                                            const currentCost = Number(costStr.replace(/,/g, '')) || 0;
-                                                            setAcqOffsetStr(formatNumberInput(String(currentCost)));
-                                                        }
-                                                    } else {
-                                                        setAcqOffsetStr('');
-                                                    }
-                                                }}
-                                                className="text-[9px] bg-red-50 text-red-700 border border-red-200 rounded outline-none max-w-[130px] truncate py-0.5 px-1 cursor-pointer hover:bg-red-100"
-                                            >
-                                                <option value="">🔗 選擇關聯單據...</option>
-                                                {allSalesDocs?.map((d:any) => (
-                                                    <option key={d.id} value={d.id}>{d.summary || d.id}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        {/* 隱藏欄位供 saveVehicle 讀取連動 ID */}
-                                        <input type="hidden" name="acq_offsetDocId" value={acqOffsetDocId} />
-                                        <input name="acq_offsetAmount" value={acqOffsetStr} onChange={e => setAcqOffsetStr(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right text-blue-700 font-bold shadow-sm min-w-0" placeholder="$0"/>
-                                    </div>
-                                    
-                                    <div className="w-full min-w-0">
-                                        <div className="flex justify-between items-end mb-1">
-                                            <label className="block text-xs md:text-[10px] text-red-500 font-bold uppercase">Advance Fee (代支 HKD)</label>
-                                            <select 
-                                                value={acqAdvanceDocId}
-                                                onChange={(e) => {
-                                                    const docId = e.target.value;
-                                                    setAcqAdvanceDocId(docId);
-                                                    if (docId) {
-                                                        const selectedDoc = allSalesDocs?.find((d:any) => d.id === docId);
-                                                        if (selectedDoc) {
-                                                            const basePrice = Number(selectedDoc.formData?.price) || 0;
-                                                            const extrasTotal = (selectedDoc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
-                                                            // 自動帶入金額並加上千分位
-                                                            setAcqAdvanceStr(formatNumberInput(String(basePrice + extrasTotal)));
-                                                        }
-                                                    } else {
-                                                        setAcqAdvanceStr('');
-                                                    }
-                                                }}
-                                                className="text-[9px] bg-red-50 text-red-700 border border-red-200 rounded outline-none max-w-[130px] truncate py-0.5 px-1 cursor-pointer hover:bg-red-100"
-                                            >
-                                                <option value="">🔗 選擇關聯單據...</option>
-                                                {allSalesDocs?.map((d:any) => (
-                                                    <option key={d.id} value={d.id}>{d.summary || d.id}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        {/* 隱藏欄位供 saveVehicle 讀取連動 ID */}
-                                        <input type="hidden" name="acq_advanceDocId" value={acqAdvanceDocId} />
-                                        <input name="acq_advanceFee" value={acqAdvanceStr} onChange={e => setAcqAdvanceStr(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right shadow-sm min-w-0" placeholder="$0" title="例如代支留牌費等"/>
-                                    </div>
-                                    {/* ★★★ 結束：對數與代支連動系統 ★★★ */}
-                                </div>
-                            )}
-                            
-                            {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
-                            <div className="mt-6 border-t border-red-200 pt-5 md:pt-4 w-full">
-                                <h4 className="font-bold text-base md:text-xs text-red-800 mb-4 md:mb-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                    <div className="flex items-center gap-3">
-                                        <span>進貨付款紀錄 (Acquisition Payments)</span>
-                                        <button 
-                                            type="button" 
-                                            onClick={handleOpenReconModal}
-                                            className="bg-red-100 hover:bg-red-200 text-red-800 border border-red-300 px-3 py-1 rounded-md text-[10px] font-black shadow-sm flex items-center transition-colors cursor-pointer select-none"
-                                        >
-                                            <Printer size={12} className="mr-1 pointer-events-none"/>
-                                            <span className="pointer-events-none">📝 編輯與匯出對數單</span>
-                                        </button>
-                                    </div>
-                                </h4>
-                                
-                                <div className="space-y-3 md:space-y-2 mb-4 w-full">
+                                {/* 歷史列表 */}
+                                <div className="bg-slate-50">
                                     {acqPayments.map((p: any) => (
-                                        <div key={p.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-2 text-sm md:text-xs p-3 md:p-2 bg-white border border-red-200 rounded-lg shadow-sm focus-within:border-red-400 focus-within:ring-1 focus-within:ring-red-100 transition-all relative">
-                                            <div className="flex flex-wrap items-center gap-2 md:flex-1 min-w-0">
-                                                <input type="date" value={p.date} onChange={(e) => handleUpdateAcqPayment(p.id, 'date', e.target.value)} className="text-gray-500 font-mono w-full sm:w-auto font-bold bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-red-300 rounded px-1 py-0.5 outline-none transition-colors cursor-pointer" />
-                                                
-                                                <select value={p.method || 'Cash'} onChange={(e) => handleUpdateAcqPayment(p.id, 'method', e.target.value)} className="bg-red-50 text-red-700 border border-transparent focus:border-red-300 px-2 py-1 rounded-md text-[10px] font-black flex-shrink-0 outline-none cursor-pointer hover:bg-red-100 transition-colors">
-                                                    <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option>
-                                                    <option value="Third-Party">第三方直付 (銀行/客人)</option>
+                                        <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors">
+                                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                                <input type="date" value={p.date} onChange={(e) => handleUpdateAcqPayment(p.id, 'date', e.target.value)} className="flex-1 md:w-28 bg-slate-100 hover:bg-white border border-transparent focus:border-red-300 rounded px-2 py-1 text-[10px] font-mono font-bold text-slate-600 outline-none cursor-pointer transition-colors" />
+                                                <select value={p.method || 'Cash'} onChange={(e) => handleUpdateAcqPayment(p.id, 'method', e.target.value)} className="flex-1 md:w-28 bg-slate-100 hover:bg-white border border-transparent focus:border-red-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800 outline-none cursor-pointer truncate transition-colors">
+                                                    <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Third-Party">第三方直付</option>
                                                 </select>
-                                                
-                                                <input type="text" value={p.note || ''} onChange={(e) => handleUpdateAcqPayment(p.id, 'note', e.target.value)} placeholder="備註..." className="text-gray-600 font-medium flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-red-300 rounded px-2 py-1 outline-none transition-colors" />
                                             </div>
-                                            <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0">
-                                                <div className="flex items-center gap-1">
-                                                    <span className="text-red-300 font-bold">$</span>
-                                                    <input type="text" value={formatNumberInput(String(p.amount))} onChange={(e) => handleUpdateAcqPayment(p.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)} className="w-24 text-right font-mono font-black text-red-700 text-lg md:text-sm bg-transparent hover:bg-red-50 focus:bg-white border border-transparent focus:border-red-300 rounded outline-none transition-colors" />
+                                            <div className="flex-1 w-full md:w-auto min-w-0">
+                                                <input type="text" value={p.note || ''} onChange={(e) => handleUpdateAcqPayment(p.id, 'note', e.target.value)} placeholder="備註 (如：受款人)..." className="w-full bg-transparent border border-transparent hover:border-slate-200 focus:border-red-400 focus:bg-white rounded px-2 py-1 text-xs outline-none transition-colors" />
+                                            </div>
+                                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end md:ml-auto">
+                                                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 rounded-md h-7 focus-within:border-red-400">
+                                                    <span className="text-[10px] font-bold text-red-400">$</span>
+                                                    <input value={formatNumberInput(String(p.amount))} onChange={(e) => handleUpdateAcqPayment(p.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)} className="w-20 md:w-24 text-right bg-transparent text-xs font-mono font-black text-red-600 outline-none" />
                                                 </div>
-                                                <button type="button" onClick={() => handleDeleteAcqPayment(p.id)} className="text-red-400 hover:text-white bg-red-50 hover:bg-red-500 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><Trash2 size={16}/></button>
+                                                <button type="button" onClick={() => handleDeleteAcqPayment(p.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 size={14}/></button>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
 
-                                {/* 新增進貨付款 */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-2 w-full">
-                                    <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold min-w-0"/>
-                                    <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
-                                        <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option>
-                                        <option value="Third-Party">第三方直付</option>
-                                    </select>
-                                    <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
-                                        <input list="acq_vendor_pay_list" placeholder="收款人 / 付款備註 (可選或自訂)..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white min-w-0"/>
+                                {/* 新增操作列 */}
+                                <div className="p-2 flex flex-col md:flex-row gap-2 items-center bg-white border-t border-slate-100">
+                                    <div className="flex w-full md:w-auto gap-2">
+                                        <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28 font-mono shrink-0"}/>
+                                        <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28 cursor-pointer shrink-0 text-red-700"}>
+                                            <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Third-Party">直付</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex-1 w-full min-w-0">
+                                        <input list="acq_vendor_pay_list" placeholder="收款人 / 付款備註..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className={COMPACT_INPUT}/>
                                         <datalist id="acq_vendor_pay_list">
                                             {(settings.expenseCompanies || []).map((c: string) => <option key={c} value={c}>{c}</option>)}
                                         </datalist>
                                     </div>
-                                    <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
-                                        <input type="text" placeholder="$ 金額" value={newAcqPayment.amount} onChange={e => setNewAcqPayment({...newAcqPayment, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-300 rounded-lg outline-none bg-white text-right font-mono font-black text-red-600 shadow-inner min-w-0"/>
-                                        <button type="button" onClick={handleAddAcqPayment} className="w-full sm:w-auto bg-red-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-red-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增付款</button>
+                                    <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+                                        <span className="text-[10px] font-bold text-slate-400 hidden md:inline">$</span>
+                                        <input value={newAcqPayment.amount} onChange={e => setNewAcqPayment({...newAcqPayment, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " flex-1 md:w-24 text-right font-mono font-black text-red-600"} placeholder="金額"/>
+                                        <button type="button" onClick={handleAddAcqPayment} className="h-8 px-4 bg-red-700 hover:bg-red-800 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">付款</button>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* ★★★ 車輛墊資與利息結算 (Floor Plan Financing) ★★★ */}
-                        <div className="bg-purple-50/40 p-4 md:p-5 rounded-xl border border-purple-200 mt-6 shadow-sm w-full">
-                            <h4 className="font-bold text-base md:text-sm text-purple-800 mb-4 flex items-center">
-                                <DollarSign size={18} className="mr-2 text-purple-600"/> 車輛墊資/貸款利息結算 (Floor Plan Financing)
-                            </h4>
-                            
-                            <div className="space-y-3 mb-4">
-                                {(v.financingRecords || []).map((f: any) => {
-                                    // ★ 即時計算已借貸天數與當前利息 (對齊結算邏輯：3個月為一期)
-                                    let currentDays = 0;
-                                    let currentInterest = 0;
-                                    if (f.status === 'Active') {
-                                        const start = new Date(f.startDate);
-                                        const today = new Date();
-                                        const diffDays = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                                        currentDays = diffDays > 0 ? diffDays : 1;
-
-                                        let diffMonths = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
-                                        if (today.getDate() > start.getDate()) diffMonths++;
-                                        if (diffMonths === 0 && currentDays > 0) diffMonths = 1;
-
-                                        const billedPeriods = Math.ceil(diffMonths / 3) || 1;
-                                        const billedMonths = billedPeriods * 3;
-                                        currentInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
-                                    }
-
-                                    return (
-                                    <div key={f.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-white border border-purple-200 rounded-lg shadow-sm">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                {/* ★ 1. 允許直接修改借貸人名稱 */}
-                                                <input 
-                                                    type="text" 
-                                                    value={f.lenderName} 
-                                                    onChange={(e) => handleUpdateFinancingField(f.id, 'lenderName', e.target.value)}
-                                                    className="font-bold text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-purple-500 outline-none w-32 md:w-auto transition-colors"
-                                                    title="點擊修改借貸方名稱"
-                                                />
-                                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${f.status === 'Active' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-200 text-slate-600'}`}>{f.status === 'Active' ? '計息中' : '已結算'}</span>
-                                            </div>
-                                            <div className="text-xs text-slate-500 font-mono">
-                                                起息日: {f.startDate} 
-                                                {/* ★ 2. 即時顯示已借貸天數與累積利息 */}
-                                                {f.status === 'Settled' 
-                                                    ? ` | 結算日: ${f.endDate} (${f.actualDays}天 / 收費 ${f.billedMonths || 3}個月)`
-                                                    : ` | 至今: ${currentDays} 天 (當前產生利息: ${formatCurrency(currentInterest)})`
-                                                }
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4 text-right border-t md:border-t-0 pt-2 md:pt-0">
-                                            <div>
-                                                <div className="text-[9px] text-purple-500 font-bold uppercase">本金 (Principal)</div>
-                                                <div className="font-mono font-bold text-slate-700">{formatCurrency(f.principal)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-[9px] text-purple-500 font-bold uppercase">年息 (P.A.)</div>
-                                                <div className="font-mono font-bold text-slate-700">{f.annualRate}%</div>
-                                            </div>
-                                            {f.status === 'Settled' && (
-                                                <div>
-                                                    <div className="text-[9px] text-red-500 font-bold uppercase">產生利息 (Interest)</div>
-                                                    <div className="font-mono font-black text-red-600">{formatCurrency(f.actualInterest)}</div>
-                                                </div>
-                                            )}
-                                            <div className="flex items-center gap-2 border-l pl-3 ml-2">
-                                                <button type="button" onClick={(e) => executeLoanAgreementPrint(e, f)} className="text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 p-1.5 rounded shadow-sm transition-colors" title="列印墊資借貸協議">
-                                                    <FileText size={14}/>
-                                                </button>
-
-                                                {f.status === 'Active' && <button type="button" onClick={(e) => { e.preventDefault(); handleSettleFinancing(f); }} className="bg-purple-600 text-white text-[10px] px-2 py-1 rounded shadow hover:bg-purple-700 font-bold">結算利息</button>}
-                                                <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteFinancing(f.id); }} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )})}
+                        {/* 📌 車輛維修與其他費用 (Expenses) */}
+                        <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden mb-5">
+                            <div className="px-3.5 py-2 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="font-bold text-slate-800 text-xs flex items-center">車輛維修與其他費用 (Expenses)</h3>
+                                <span className="text-[10px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded shadow-sm border border-slate-300">總支出: {formatCurrency(totalExpenses)}</span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-purple-200 w-full">
-                                <input type="date" value={newFinancing.startDate} onChange={e => setNewFinancing({...newFinancing, startDate: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-purple-200 rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"/>
-                                
-                                <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
-                                    <input list="lender_list" placeholder="金主 / 貸款方..." value={newFinancing.lenderName} onChange={e => setNewFinancing({...newFinancing, lenderName: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-purple-200 rounded-lg outline-none bg-white font-bold text-slate-800"/>
-                                    <datalist id="lender_list">{(settings.lenders || []).map((l:string) => <option key={l} value={l}/>)}</datalist>
-                                </div>
-                                
-                                <div className="w-full lg:w-28 relative min-w-0">
-                                    <input type="number" step="0.1" placeholder="年息 %" value={newFinancing.annualRate} onChange={e => setNewFinancing({...newFinancing, annualRate: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-purple-200 rounded-lg outline-none bg-white font-mono font-bold text-purple-700 text-center"/>
-                                </div>
-
-                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
-                                    <input type="text" placeholder="$ 融資本金" value={newFinancing.principal} onChange={e => setNewFinancing({...newFinancing, principal: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-purple-300 rounded-lg outline-none bg-purple-50/50 text-right font-mono font-black text-purple-700 shadow-inner min-w-0"/>
-                                    <button type="button" onClick={handleAddFinancing} className="w-full sm:w-auto bg-purple-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-purple-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">借入墊資</button>
-                                </div>
-                            </div>
-                        </div>
-                     
-                        {/* 車輛維修與雜費 (Expenses) */}
-                        <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200 mt-6 shadow-sm w-full">
-                            <h4 className="font-bold text-base md:text-sm text-gray-800 mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                <span>車輛維修與其他費用 (Expenses)</span>
-                                <span className="text-slate-700 bg-white border border-slate-300 px-4 py-1.5 rounded-full text-xs shadow-sm w-fit">總支出: {formatCurrency(totalExpenses)}</span>
-                            </h4>
-                            
-                            <div className="space-y-3 md:space-y-2 mb-4 w-full">
+                            {/* 歷史支出列表 */}
+                            <div className="bg-slate-50">
                                 {(v.expenses || []).map((exp: any) => (
-                                    <div key={exp.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-white border rounded-lg shadow-sm relative transition-colors ${exp.status === 'Transferred' ? 'border-indigo-300 bg-indigo-50/10' : 'border-slate-200'}`}>
-                                        <div className="flex flex-wrap items-center gap-3 md:flex-1 min-w-0">
-                                            <span className="text-gray-400 font-mono w-full sm:w-auto font-bold">{exp.date}</span>
-                                            <span className="font-black text-slate-800 bg-slate-100 px-2 py-1 rounded-md">{exp.type}</span>
-                                            <span className="text-gray-600 flex-1 truncate w-full sm:w-auto font-medium">{exp.company}</span>
-                                            {/* ★ 顯示並允許直接修改付款方式 (已轉總帳則鎖定) */}
+                                    <div key={exp.id} className={`flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors ${exp.status === 'Transferred' ? 'bg-indigo-50/30' : ''}`}>
+                                        <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                            <span className="text-gray-400 font-mono text-[10px] font-bold w-16 truncate">{exp.date}</span>
+                                            <span className="font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[90px]" title={exp.type}>{exp.type}</span>
                                             {exp.status === 'Paid' && (
                                                 <select 
                                                     value={exp.paymentMethod || 'Cash'}
                                                     onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        if (v.id) {
-                                                            updateSubItem(v.id, 'expenses', (v.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: val} : ex));
-                                                        } else {
-                                                            setEditingVehicle((prev: any) => prev ? ({...prev, expenses: (prev.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: val} : ex)}) : null);
-                                                        }
+                                                        if (v.id) updateSubItem(v.id, 'expenses', (v.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: e.target.value} : ex));
+                                                        else setEditingVehicle((prev: any) => prev ? ({...prev, expenses: (prev.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: e.target.value} : ex)}) : null);
                                                     }}
-                                                    className={`px-2 py-1 rounded-md text-[10px] font-bold border outline-none cursor-pointer shadow-sm transition-colors ${exp.paymentMethod === 'Included' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}
+                                                    className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-600 outline-none cursor-pointer ml-1"
                                                 >
-                                                    <option value="Included">併入車價 (Included)</option>
-                                                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
-                                                                    <option value="Cash">現金 (Cash)</option>
-                                                                    <option value="Transfer">轉帳 (Transfer)</option>
-                                                                    <option value="Cheque">支票 (Cheque)</option>
-                                                                    <option value="USDT">USDT</option>
+                                                    <option value="Included">併入車價</option><option value="Staff_Advance">代墊</option><option value="Cash">現金</option><option value="Transfer">轉帳</option><option value="Cheque">支票</option><option value="USDT">USDT</option>
                                                 </select>
                                             )}
                                         </div>
-                                        <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
-                                            <span className="font-mono font-black text-lg md:text-base text-slate-700">{formatCurrency(exp.amount)}</span>
-                                            <div className="flex items-center gap-2">
-                                                {/* ★ 智能狀態按鈕 */}
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => handleToggleExpenseStatus(exp)} 
-                                                    className={`px-3 py-1.5 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border transition-colors shadow-sm 
-                                                        ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : 
-                                                         (exp.status === 'Transferred' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 cursor-help' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100')}`}
-                                                >
-                                                    {exp.status === 'Paid' ? '已付' : (exp.status === 'Transferred' ? '已轉總帳' : '未付')}
-                                                </button>
-                                                
-                                                {/* 轉總帳後禁止在這邊直接刪除 */}
-                                                {exp.status !== 'Transferred' && (
-                                                    <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-gray-400 hover:text-white bg-gray-100 hover:bg-red-500 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><X size={16}/></button>
-                                                )}
-                                            </div>
+                                        
+                                        <div className="flex-1 w-full md:w-auto min-w-0 flex items-center">
+                                            <span className="text-gray-600 text-xs font-medium truncate flex-1">{exp.company}</span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end md:ml-auto">
+                                            <span className="font-mono font-black text-xs text-slate-700 w-20 md:w-24 text-right mr-2">{formatCurrency(exp.amount)}</span>
+                                            <button type="button" onClick={() => handleToggleExpenseStatus(exp)} className={`px-2 py-0.5 rounded text-[9px] font-black border shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : (exp.status === 'Transferred' ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100')}`}>
+                                                {exp.status === 'Paid' ? '已付' : (exp.status === 'Transferred' ? '已轉總帳' : '未付')}
+                                            </button>
+                                            {exp.status !== 'Transferred' && <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-slate-300 hover:text-red-500 p-1"><X size={14}/></button>}
                                         </div>
                                     </div>
                                 ))}
-                                
                             </div>
 
-                            {/* 新增費用 */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-300 w-full">
-                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"/>
-                                
-                                <div className="w-full lg:w-36 relative min-w-0">
-                                    <input list="expense_type_list" placeholder="選項目 / 自訂..." value={newExpense.type} onChange={e => handleExpenseTypeChange(e.target.value)} className="w-full text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                            {/* 新增支出操作列 */}
+                            <div className="p-2 flex flex-col md:flex-row gap-2 items-center bg-white border-t border-slate-100">
+                                <div className="flex w-full md:w-auto gap-2 shrink-0">
+                                    <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28 font-mono"}/>
+                                    <input list="expense_type_list" placeholder="選項目..." value={newExpense.type} onChange={e => handleExpenseTypeChange(e.target.value)} className={COMPACT_INPUT + " flex-1 md:w-28"}/>
                                     <datalist id="expense_type_list">
                                         {settings.expenseTypes.map((t: any) => { const name = typeof t === 'string' ? t : t.name; return <option key={name} value={name}>{name}</option>; })}
                                     </datalist>
                                 </div>
                                 
-                                <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
-                                    <input list="expense_company_list" placeholder="選公司 / 自訂車房..." value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
+                                <div className="flex-1 w-full min-w-0 flex gap-2">
+                                    <input list="expense_company_list" placeholder="選公司 / 車房..." value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className={COMPACT_INPUT + " flex-1"}/>
                                     <datalist id="expense_company_list">
                                         {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
                                     </datalist>
+                                    <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className={COMPACT_INPUT + " w-24 shrink-0"}>
+                                        <option value="Unpaid">未付 (Unpaid)</option><option value="Staff_Advance">代墊</option><option value="Included">併入車價</option><option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option>
+                                    </select>
                                 </div>
 
-                                {/* ★ 新增：付款方式與狀態下拉 */}
-                                <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full lg:w-36 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
-                                    <option value="Unpaid">未付 (Unpaid)</option>
-                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
-                                    <option value="Included">併入車價 (Included)</option>
-                                    <option value="Cash">現金 (Cash)</option>
-                                    <option value="Cheque">支票 (Cheque)</option>
-                                    <option value="Transfer">轉帳 (Transfer)</option>
-                                    <option value="USDT">USDT</option>
-                                    <option value="Trade-in">對數 (Trade-in)</option>
-                                </select>
-                                
-                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
-                                    <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
-                                    <button type="button" onClick={handleAddExpenseClick} className="w-full sm:w-auto bg-slate-800 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">記一筆支出</button>
+                                <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+                                    <span className="text-[10px] font-bold text-slate-400 hidden md:inline">$</span>
+                                    <input value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " flex-1 md:w-24 text-right font-mono font-black text-red-600"} placeholder="金額"/>
+                                    <button type="button" onClick={handleAddExpenseClick} className="h-8 px-4 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">記一筆</button>
                                 </div>
                             </div>
                         </div>
