@@ -2451,6 +2451,112 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
+                        {/* 📌 車輛墊資與利息結算 (Floor Plan Financing - 帶合約) */}
+                        <div className={COMPACT_CARD}>
+                            <div className={COMPACT_CARD_HEADER}>
+                                <h3 className="font-bold text-purple-800 text-xs flex items-center">
+                                    <DollarSign size={14} className="mr-1 text-purple-600"/> 車輛墊資 / 貸款利息 (Floor Plan)
+                                </h3>
+                            </div>
+                            
+                            {/* 歷史紀錄列表 */}
+                            <div className="bg-slate-50">
+                                {(v.financingRecords || []).map((f: any) => {
+                                    // 即時計算已借貸天數與當前利息 (對齊結算邏輯：3個月為一期)
+                                    let currentDays = 0;
+                                    let currentInterest = 0;
+                                    if (f.status === 'Active') {
+                                        const start = new Date(f.startDate);
+                                        const today = new Date();
+                                        const diffDays = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                                        currentDays = diffDays > 0 ? diffDays : 1;
+                                        
+                                        let diffMonths = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+                                        if (today.getDate() > start.getDate()) diffMonths++;
+                                        if (diffMonths === 0 && currentDays > 0) diffMonths = 1;
+                                        
+                                        const billedPeriods = Math.ceil(diffMonths / 3) || 1;
+                                        const billedMonths = billedPeriods * 3;
+                                        // 注意：此處已處理浮點數誤差，統一使用 Math.round
+                                        currentInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
+                                    }
+
+                                    return (
+                                        <div key={f.id} className="flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors">
+                                            <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${f.status === 'Active' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-200 text-slate-600'}`}>
+                                                        {f.status === 'Active' ? '計息中' : '已結算'}
+                                                    </span>
+                                                    <input 
+                                                        type="text" value={f.lenderName} 
+                                                        onChange={(e) => handleUpdateFinancingField(f.id, 'lenderName', e.target.value)}
+                                                        className="font-bold text-slate-800 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-purple-500 outline-none w-24 md:w-32 transition-colors"
+                                                        title="點擊修改借貸方名稱"
+                                                    />
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 font-mono flex-1 truncate">
+                                                    起息: {f.startDate} 
+                                                    {f.status === 'Settled' 
+                                                        ? ` | 結算: ${f.endDate} (${f.actualDays}天/收 ${f.billedMonths || 3}個月)`
+                                                        : ` | 至今: ${currentDays} 天 (產生利息: ${formatCurrency(currentInterest)})`
+                                                    }
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-3 shrink-0 justify-end mt-1 md:mt-0 md:ml-auto">
+                                                <div className="text-right">
+                                                    <span className="text-[9px] text-purple-400 font-bold block leading-none mb-0.5">本金 / 年息</span>
+                                                    <span className="font-mono font-bold text-slate-700 text-xs">{formatCurrency(f.principal)} ({f.annualRate}%)</span>
+                                                </div>
+                                                {f.status === 'Settled' && (
+                                                    <div className="text-right border-l pl-3 border-slate-200">
+                                                        <span className="text-[9px] text-red-400 font-bold block leading-none mb-0.5">產生利息</span>
+                                                        <span className="font-mono font-black text-red-600 text-xs">{formatCurrency(f.actualInterest)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-1.5 border-l pl-3 border-slate-200 ml-1">
+                                                    {/* 列印墊資合約按鈕 */}
+                                                    <button type="button" onClick={(e) => executeLoanAgreementPrint(e, f)} className="text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 p-1.5 rounded shadow-sm transition-colors" title="列印墊資借貸協議">
+                                                        <FileText size={14}/>
+                                                    </button>
+                                                    {f.status === 'Active' && (
+                                                        <button type="button" onClick={(e) => { e.preventDefault(); handleSettleFinancing(f); }} className="bg-purple-600 text-white text-[9px] px-2 py-1 h-7 rounded shadow-sm hover:bg-purple-700 font-bold transition-transform active:scale-95">結算</button>
+                                                    )}
+                                                    <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteFinancing(f.id); }} className="text-slate-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {(v.financingRecords || []).length === 0 && <div className="text-center text-[10px] text-slate-400 py-4">無墊資紀錄</div>}
+                            </div>
+
+                            {/* 新增操作列 */}
+                            <div className="p-2 flex flex-col md:flex-row gap-2 items-center bg-white border-t border-slate-100">
+                                <div className="flex w-full md:w-auto gap-2 shrink-0">
+                                    <input type="date" value={newFinancing.startDate} onChange={e => setNewFinancing({...newFinancing, startDate: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28 font-mono"}/>
+                                </div>
+                                
+                                <div className="flex-1 w-full flex gap-2 min-w-0">
+                                    <input list="lender_list" placeholder="金主 / 貸款方..." value={newFinancing.lenderName} onChange={e => setNewFinancing({...newFinancing, lenderName: e.target.value})} className={COMPACT_INPUT + " flex-1"}/>
+                                    <datalist id="lender_list">{(settings.lenders || []).map((l:string) => <option key={l} value={l}/>)}</datalist>
+                                    
+                                    <div className="relative w-20 shrink-0">
+                                        <input type="number" step="0.1" placeholder="年息%" value={newFinancing.annualRate} onChange={e => setNewFinancing({...newFinancing, annualRate: e.target.value})} className={COMPACT_INPUT + " w-full font-mono text-center pr-4"}/>
+                                        <span className="absolute right-2 top-2 text-[10px] text-slate-400 font-bold">%</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+                                    <span className="text-[10px] font-bold text-slate-400 hidden md:inline">$</span>
+                                    <input type="text" placeholder="融資本金" value={newFinancing.principal} onChange={e => setNewFinancing({...newFinancing, principal: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " flex-1 md:w-24 text-right font-mono font-black text-purple-700 bg-purple-50/30"}/>
+                                    <button type="button" onClick={handleAddFinancing} className="h-8 px-4 bg-purple-700 hover:bg-purple-800 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">借入</button>
+                                </div>
+                            </div>
+                        </div>
+
+                     
                         {/* 📌 車輛維修與其他費用 (Expenses) */}
                         <div className={COMPACT_CARD}>
                             <div className="px-3.5 py-2 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
