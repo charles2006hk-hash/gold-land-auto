@@ -535,7 +535,7 @@ const VehicleFormModal = ({
         safeUpdateFinancing((v.financingRecords || []).filter((f: any) => f.id !== id));
     };
 
-    const handleSettleFinancing = async (f: any) => {
+   const handleSettleFinancing = async (f: any) => {
         const endDate = new Date().toISOString().split('T')[0]; 
         const start = new Date(f.startDate);
         const end = new Date(endDate);
@@ -543,14 +543,30 @@ const VehicleFormModal = ({
         const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         const actualDays = diffDays > 0 ? diffDays : 1; 
 
-        let diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-        if (end.getDate() > start.getDate()) diffMonths++;
-        if (diffMonths === 0 && actualDays > 0) diffMonths = 1;
+        // ★ 核心結息邏輯升級 2.0：
+        // 1. 首 3 個月內結算，按 3 個月計。
+        // 2. 超過 3 個月但多出的天數在 30 天內，多出部分按天計息。
+        // 3. 多出天數超過 30 天，視為進入下一期 (共收 6 個月利息)。
+        let calculatedInterest = 0;
+        let billingDesc = "";
+        const threeMonthsInDays = 90;
 
-        const billedPeriods = Math.ceil(diffMonths / 3) || 1; 
-        const billedMonths = billedPeriods * 3;
-
-        const calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
+        if (actualDays <= threeMonthsInDays) {
+            calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (3 / 12));
+            billingDesc = "首期 3 個月";
+        } else {
+            const remainingDays = actualDays - threeMonthsInDays;
+            if (remainingDays <= 30) {
+                const baseInterest = f.principal * (f.annualRate / 100) * (3 / 12);
+                const dailyInterest = (f.principal * (f.annualRate / 100)) / 365 * remainingDays;
+                calculatedInterest = Math.round(baseInterest + dailyInterest);
+                billingDesc = `首期 3 個月 + 按天計息 (${remainingDays}天)`;
+            } else {
+                // 超過 30 天，算作 6 個月
+                calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (6 / 12));
+                billingDesc = "滿 3 個月且逾期超 30 天，以 6 個月計";
+            }
+        }
 
         const updated = { 
             ...f, 
@@ -558,7 +574,7 @@ const VehicleFormModal = ({
             endDate: endDate, 
             actualInterest: calculatedInterest, 
             actualDays: actualDays,
-            billedMonths: billedMonths 
+            billedMonths: billingDesc // 複用此欄位存儲計費說明
         };
         safeUpdateFinancing((v.financingRecords || []).map((x: any) => x.id === f.id ? updated : x));
         
@@ -568,7 +584,7 @@ const VehicleFormModal = ({
                 if (calculatedInterest > 0) {
                     await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
                         partner: f.lenderName, date: endDate, type: 'payable', amount: calculatedInterest, 
-                        note: `[系統結算] ${v.regMark || '未出牌'} 融資利息 (${billedMonths}個月)`, sourceModule: 'vehicle_finance',
+                        note: `[系統結算] ${v.regMark || '未出牌'} 融資利息 (${billingDesc})`, sourceModule: 'vehicle_finance',
                         vehicleId: v.id, createdAt: serverTimestamp(), createdBy: staffId 
                     });
                 }
@@ -577,7 +593,7 @@ const VehicleFormModal = ({
                     note: `[系統結算] ${v.regMark || '未出牌'} 融資本金歸還`, sourceModule: 'vehicle_finance',
                     vehicleId: v.id, createdAt: serverTimestamp(), createdBy: staffId 
                 });
-                alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費週期: ${billedPeriods} 期\n產生利息: $${calculatedInterest.toLocaleString()}\n\n系統已自動將本金與利息轉入【財務總覽 -> 行家來往】的應付帳款中！`);
+                alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費模式: ${billingDesc}\n產生利息: $${calculatedInterest.toLocaleString()}\n\n系統已自動將本金與利息轉入【財務總覽 -> 行家來往】的應付帳款中！`);
             } catch (err) {
                 console.error("連動寫入總帳失敗", err);
                 alert(`結息成功，但連動寫入財務總帳失敗，請手動補登。`);
@@ -634,7 +650,7 @@ const VehicleFormModal = ({
                 <div style="font-size: 12px; line-height: 1.8; color: #475569; background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px;">
                     <ol style="margin: 0; padding-left: 20px;">
                         <li style="margin-bottom: 8px;"><b>借款目的：</b>本筆墊資款項專用於上述標的車輛之進貨或營運周轉。</li>
-                        <li style="margin-bottom: 8px;"><b>利息計算：</b>利息自「起息日」起算，按雙方議定之年利率 <b>${f.annualRate}%</b> 計算。利息結算週期以每三個月為一期，不足三個月按三個月計算 (或按雙方另行書面約定辦理)。</li>
+                        <li style="margin-bottom: 8px;"><b>利息計算與週期：</b>利息自「起息日」起算，按雙方議定之年利率 <b>${f.annualRate}%</b> 計算。利息結算首期以三個月為一期 (不足三個月按三個月計算)。若到期後 30 天內結算，超出之天數則按天數比例計息；若超出 30 天仍未結清，則自動進入下一期，累計以六個月計息 (或按雙方另行書面約定辦理)。</li>
                         <li style="margin-bottom: 8px;"><b>本息償還：</b>借款方須於標的車輛成功售出並收到客戶尾數後，或於貸款方要求之合理期限內，將融資本金及已產生之利息全數歸還予貸款方。</li>
                         <li style="margin-bottom: 8px;"><b>資產擔保：</b>於本金及利息全數結清前，上述標的車輛之處分權及相關權益受本協議約束，作為本筆債務之參考擔保。</li>
                         <li><b>爭議解決：</b>本協議受香港特別行政區法律管轄。雙方如有爭議，應本著誠信原則協商解決。</li>
@@ -1007,13 +1023,52 @@ const VehicleFormModal = ({
     const baseCost = Number(costStr.replace(/,/g, '')) || 0;
     const totalExpensesPaid = (v.expenses || []).filter((e:any) => e.status === 'Paid' && e.paymentMethod !== 'Included').reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
     
-    const totalCostAll = baseCost + totalExpenses;
+    // ★ 智能計算 1：動態計算墊資總利息 (包含進行中與已結算)
+    const totalFinancingInterest = (v.financingRecords || []).reduce((sum: number, f: any) => {
+        if (f.status === 'Settled') {
+            return sum + (f.actualInterest || 0);
+        } else if (f.status === 'Active') {
+            // 對齊進階計息邏輯：首3個月為一期，之後30天內按天，超過30天進位為一期
+            const start = new Date(f.startDate);
+            const today = new Date();
+            const diffDays = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            const actualDays = diffDays > 0 ? diffDays : 1;
+            
+            let calculatedInterest = 0;
+            const threeMonthsInDays = 90;
+            
+            if (actualDays <= threeMonthsInDays) {
+                // 首 3 個月內，直接收取 3 個月利息
+                calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (3 / 12));
+            } else {
+                // 超過 3 個月
+                const remainingDays = actualDays - threeMonthsInDays;
+                if (remainingDays <= 30) {
+                    // 多出的天數在 30 天內，按天計算 (首期3個月利息 + 按天利息)
+                    const baseInterest = f.principal * (f.annualRate / 100) * (3 / 12);
+                    const dailyInterest = (f.principal * (f.annualRate / 100)) / 365 * remainingDays;
+                    calculatedInterest = Math.round(baseInterest + dailyInterest);
+                } else {
+                    // 超過 30 天，視為進入下一個 3 個月週期 (共收 6 個月利息)
+                    calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (6 / 12));
+                }
+            }
+            return sum + calculatedInterest;
+        }
+        return sum;
+    }, 0);
+
+    // ★ 核心修復：總成本必須包含「維修雜費」與「借貸墊資利息」
+    const totalCostAll = Math.round(baseCost + totalExpenses + totalFinancingInterest);
 
     const hasFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
-    const netProfit = totalRevenue - totalCostAll;
+    
+    // ★ 核心修復：利潤 = 總應收 - 總成本 (已包含利息)
+    const netProfit = Math.round(totalRevenue - totalCostAll);
  
-    const totalPaidAll = totalAcqPaid + acqOffsetAmount + totalExpensesPaid;
-    const acqBalance = totalCostAll - totalPaidAll;
+    const totalPaidAll = Math.round(totalAcqPaid + acqOffsetAmount + totalExpensesPaid);
+    // 欠款也應反映墊資利息的成本
+    const acqBalance = Math.round(totalCostAll - totalPaidAll);
     
     const handleAddAcqPayment = () => {
         const amt = Number(newAcqPayment.amount.replace(/,/g, ''));
@@ -2462,23 +2517,33 @@ const VehicleFormModal = ({
                             {/* 歷史紀錄列表 */}
                             <div className="bg-slate-50">
                                 {(v.financingRecords || []).map((f: any) => {
-                                    // 即時計算已借貸天數與當前利息 (對齊結算邏輯：3個月為一期)
+                                    // ★ 即時計算已借貸天數與當前利息 (對齊結算邏輯：3個月一期，超期30天內按天)
                                     let currentDays = 0;
                                     let currentInterest = 0;
+                                    let currentBillingDesc = "";
+                                    
                                     if (f.status === 'Active') {
                                         const start = new Date(f.startDate);
                                         const today = new Date();
                                         const diffDays = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
                                         currentDays = diffDays > 0 ? diffDays : 1;
-                                        
-                                        let diffMonths = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
-                                        if (today.getDate() > start.getDate()) diffMonths++;
-                                        if (diffMonths === 0 && currentDays > 0) diffMonths = 1;
-                                        
-                                        const billedPeriods = Math.ceil(diffMonths / 3) || 1;
-                                        const billedMonths = billedPeriods * 3;
-                                        // 注意：此處已處理浮點數誤差，統一使用 Math.round
-                                        currentInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
+
+                                        const threeMonthsInDays = 90;
+                                        if (currentDays <= threeMonthsInDays) {
+                                            currentInterest = Math.round(f.principal * (f.annualRate / 100) * (3 / 12));
+                                            currentBillingDesc = "3個月";
+                                        } else {
+                                            const remainingDays = currentDays - threeMonthsInDays;
+                                            if (remainingDays <= 30) {
+                                                const baseInterest = f.principal * (f.annualRate / 100) * (3 / 12);
+                                                const dailyInterest = (f.principal * (f.annualRate / 100)) / 365 * remainingDays;
+                                                currentInterest = Math.round(baseInterest + dailyInterest);
+                                                currentBillingDesc = `3個月+${remainingDays}天`;
+                                            } else {
+                                                currentInterest = Math.round(f.principal * (f.annualRate / 100) * (6 / 12));
+                                                currentBillingDesc = "6個月";
+                                            }
+                                        }
                                     }
 
                                     return (
