@@ -753,8 +753,9 @@ export default function CrossBorderView({
                                             <input 
                                                 type="date" 
                                                 value={lastOutDate || ''}
+                                                max={new Date().toISOString().split('T')[0]} // 限制最大日期為今天，交給原生 HTML 防呆
                                                 onChange={(e) => updateVehicle(activeCar.id!, { lastOutboundDate: e.target.value } as any)}
-                                                className="bg-black/30 border border-white/20 text-white text-xs px-2 py-2 rounded-lg outline-none flex-1 md:w-36 cursor-pointer focus:border-blue-400 transition-colors font-mono"
+                                                className="bg-black/30 border border-white/20 text-white text-xs px-2 py-2 rounded-lg outline-none flex-1 md:w-36 cursor-pointer focus:border-blue-400 transition-colors font-mono [color-scheme:dark]" // 加入 [color-scheme:dark] 讓日曆圖示變白
                                                 title="手動修改日期"
                                             />
                                             {lastOutDate ? (
