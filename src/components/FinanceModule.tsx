@@ -832,6 +832,53 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         link.click();
     };
 
+    // 👇 新增：全域流水帳編輯與刪除功能 (支援總帳、股東、行家、員工報銷)
+    const handleGlobalDelete = async (item: any) => {
+        if (!db) return;
+        if (item.id.startsWith('pay_') || item.id.startsWith('acq_') || item.id.startsWith('exp_') || item.id.startsWith('maint_')) {
+            alert("⚠️ 系統保護：此紀錄為「車輛專屬明細」(如車款、維修、進貨)。\n請至對應的【車輛詳情面板】進行刪除，以維持數據一致性。");
+            return;
+        }
+        if (!confirm(`確定要永久刪除這筆紀錄嗎？\n\n摘要: ${item.desc}\n金額: $${formatCurrency(item.amount)}`)) return;
+        
+        try {
+            const { doc, deleteDoc } = await import('firebase/firestore');
+            if (item.id.startsWith('comp_')) await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', item.id.replace('comp_', '')));
+            else if (item.id.startsWith('ptn_')) await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', item.id.replace('ptn_', '')));
+            else if (item.id.startsWith('staff_')) await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers', item.id.replace('staff_', '')));
+        } catch (e) { alert('刪除失敗，請檢查權限'); }
+    };
+
+    const handleGlobalEdit = async (item: any) => {
+        if (!db) return;
+        if (item.id.startsWith('pay_') || item.id.startsWith('acq_') || item.id.startsWith('exp_') || item.id.startsWith('maint_')) {
+            alert("⚠️ 此為車輛專屬明細，請至【車輛詳情面板】修改。");
+            return;
+        }
+        const newAmountStr = window.prompt(`修改金額 (目前: ${item.amount}):`, String(item.amount));
+        if (newAmountStr === null) return;
+        const newAmount = Number(newAmountStr.replace(/,/g, ''));
+        if (isNaN(newAmount) || newAmount <= 0) return alert('無效金額');
+
+        let newNote = '';
+        if (item.id.startsWith('ptn_') || item.id.startsWith('staff_')) {
+             const rawDesc = item.desc.split('] ')[1] || item.desc;
+             const inputNote = window.prompt(`修改備註/摘要 (目前: ${rawDesc}):`, rawDesc);
+             if (inputNote === null) return; newNote = inputNote;
+        } else if (item.id.startsWith('comp_')) {
+             const rawDesc = item.desc.split('] ')[1]?.split(' - ')[1] || item.desc;
+             const inputNote = window.prompt(`修改項目名稱 (目前: ${rawDesc}):`, rawDesc);
+             if (inputNote === null) return; newNote = inputNote;
+        }
+
+        try {
+            const { doc, updateDoc } = await import('firebase/firestore');
+            if (item.id.startsWith('comp_')) await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', item.id.replace('comp_', '')), { amount: newAmount, title: newNote || undefined });
+            else if (item.id.startsWith('ptn_')) await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', item.id.replace('ptn_', '')), { amount: newAmount, note: newNote || undefined });
+            else if (item.id.startsWith('staff_')) await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers', item.id.replace('staff_', '')), { amount: newAmount, note: newNote || undefined });
+        } catch (e) { alert('修改失敗'); }
+    };
+
     return (
         <div className="p-2 md:p-4 bg-slate-100/50 rounded-lg shadow-sm h-full min-h-0 overflow-hidden flex flex-col">
             
@@ -1271,11 +1318,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                     </div>
                                                     <div className="text-right flex items-center justify-between md:justify-end gap-4 w-full md:w-auto mt-3 md:mt-0 pt-3 md:pt-0 border-t md:border-0 border-slate-100">
                                                         <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>{l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
-                                                        {isSystemAuto ? (
-                                                            <div className="opacity-100 md:opacity-0 group-hover:opacity-100 p-2 text-slate-300 cursor-help transition-all bg-slate-50 md:bg-transparent rounded-lg" title="系統連動紀錄，如需修改/刪除請至車輛面板退回「未付」"><Lock size={16}/></div>
-                                                        ) : (
-                                                            <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-100 md:opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 md:bg-transparent rounded-lg transition-all" title="刪除此紀錄"><Trash2 size={16}/></button>
-                                                        )}
+                                                        {/* 解鎖系統連動紀錄的刪除按鈕 */}
+                                                        <button 
+                                                            onClick={() => handleDeleteLedgerRecord(l.id)} 
+                                                            className={`opacity-100 md:opacity-0 group-hover:opacity-100 p-2 rounded-lg transition-all ${isSystemAuto ? 'text-red-300 hover:text-red-600 hover:bg-red-50 bg-slate-50 md:bg-transparent' : 'text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 md:bg-transparent'}`} 
+                                                            title={isSystemAuto ? "強制刪除系統連動紀錄" : "刪除此紀錄"}
+                                                        >
+                                                            <Trash2 size={16}/>
+                                                        </button>
                                                     </div>
                                                 </div>
                                             );
@@ -1499,11 +1549,11 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     </div>
 
                     {/* 流水帳表格 */}
-                    <div className="flex-1 overflow-auto bg-white relative">
-                        <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                    <div className="flex-1 w-full overflow-x-auto bg-white relative scrollbar-thin scrollbar-thumb-slate-300 pb-2">
+                        <table className="w-full min-w-[1200px] text-left text-sm border-collapse whitespace-nowrap">
                             <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm">
                                 <tr>
-                                    <th className="p-3 pl-6 w-16 text-center"><CheckSquare size={16} className="text-slate-400 inline"/></th>
+                                    <th className="p-3 pl-6 w-12 text-center"><CheckSquare size={16} className="text-slate-400 inline"/></th>
                                     <th className="p-3 w-28">日期</th>
                                     <th className="p-3 w-40">會計類別</th>
                                     <th className="p-3 w-32">對象 / 車牌</th>
@@ -1511,7 +1561,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     <th className="p-3 w-28">支付方式</th>
                                     <th className="p-3 max-w-xs">財務備註</th>
                                     <th className="p-3 text-right text-emerald-700">收入 (IN)</th>
-                                    <th className="p-3 text-right pr-6 text-red-700">支出 (OUT)</th>
+                                    <th className="p-3 text-right text-red-700">支出 (OUT)</th>
+                                    <th className="p-3 pr-6 text-center w-24">操作</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -1539,18 +1590,23 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         <td className="p-3 text-right font-mono font-bold text-emerald-600 bg-emerald-50/10">
                                             {l.type === 'IN' ? formatCurrency(l.amount) : ''}
                                         </td>
-                                        <td className="p-3 pr-6 text-right font-mono font-bold text-red-600 bg-red-50/10">
+                                        <td className="p-3 text-right font-mono font-bold text-red-600 bg-red-50/10">
                                             {l.type === 'OUT' ? formatCurrency(l.amount) : ''}
+                                        </td>
+                                        <td className="p-3 pr-6 text-center flex items-center justify-center gap-1.5 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => handleGlobalEdit(l)} className="text-slate-300 hover:text-blue-500 hover:bg-blue-50 p-1.5 rounded transition-colors" title="編輯金額與摘要"><Edit size={16}/></button>
+                                            <button onClick={() => handleGlobalDelete(l)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="刪除紀錄"><Trash2 size={16}/></button>
                                         </td>
                                     </tr>
                                 ))}
-                                {filteredAccLedger.length === 0 && <tr><td colSpan={9} className="p-12 text-center text-slate-400">目前沒有符合條件的紀錄</td></tr>}
+                                {filteredAccLedger.length === 0 && <tr><td colSpan={10} className="p-12 text-center text-slate-400">目前沒有符合條件的紀錄</td></tr>}
                             </tbody>
                             <tfoot className="sticky bottom-0 bg-slate-50 font-bold border-t-2 border-slate-300 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
                                 <tr>
                                     <td colSpan={7} className="p-3 text-right text-slate-500 uppercase tracking-widest">目前顯示區間總計:</td>
                                     <td className="p-3 text-right text-base font-black font-mono text-emerald-600">{formatCurrency(filteredTotalIn)}</td>
-                                    <td className="p-3 pr-6 text-right text-base font-black font-mono text-red-600">{formatCurrency(filteredTotalOut)}</td>
+                                    <td className="p-3 text-right text-base font-black font-mono text-red-600">{formatCurrency(filteredTotalOut)}</td>
+                                    <td className="p-3 pr-6"></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1780,7 +1836,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     {staffExpForm.targetType === 'partner_payment' && (
                                         <div>
                                             <label className="block text-xs font-bold text-indigo-700 mb-1 flex items-center"><Users size={14} className="mr-1"/> 選擇行家 / 指標主</label>
-                                            {/* ★ 修復：輸入框的資料來源不再混入 expenseCompanies */}
                                             <input list="staff_partner_list" value={staffExpForm.targetPartnerId} onChange={e => setStaffExpForm({...staffExpForm, targetPartnerId: e.target.value})} placeholder="選擇或輸入名稱..." className="w-full p-2.5 border border-indigo-200 bg-white rounded-lg outline-none font-bold text-indigo-900" required />
                                             <datalist id="staff_partner_list">
                                                 {allPartners?.map((p:string) => <option key={p} value={p}/>)}
