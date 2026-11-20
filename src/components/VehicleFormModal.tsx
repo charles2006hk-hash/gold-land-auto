@@ -530,12 +530,45 @@ const VehicleFormModal = ({
         }
     };
 
-    const handleDeleteFinancing = (id: string) => {
-        if(!confirm("確定刪除此筆墊資記錄？")) return;
+    const handleDeleteFinancing = async (id: string) => {
+        if(!confirm("確定刪除此筆墊資記錄？\n⚠️ 若已結算，系統將同步刪除【財務總覽】中的連動帳目。")) return;
+        
         safeUpdateFinancing((v.financingRecords || []).filter((f: any) => f.id !== id));
+
+        // 執行連動刪除 (透過確定的文件 ID)
+        if (db && appId) {
+            try {
+                const { doc, deleteDoc } = await import('firebase/firestore');
+                const ledgerRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers');
+                await deleteDoc(doc(ledgerRef, `fin_int_${id}`)); // 刪除利息帳
+                await deleteDoc(doc(ledgerRef, `fin_prp_${id}`)); // 刪除本金帳
+            } catch (e) {
+                console.error("連動刪除總帳失敗", e);
+            }
+        }
     };
 
-   const handleSettleFinancing = async (f: any) => {
+   // ★ 修正 1：刪除墊資時，同時精準刪除總帳中的連動紀錄
+    const handleDeleteFinancing = async (id: string) => {
+        if(!confirm("確定刪除此筆墊資記錄？\n⚠️ 若已結算，系統將同步刪除【財務總覽】中的連動帳目。")) return;
+        
+        safeUpdateFinancing((v.financingRecords || []).filter((f: any) => f.id !== id));
+
+        // 執行連動刪除 (透過確定的文件 ID)
+        if (db && appId) {
+            try {
+                const { doc, deleteDoc } = await import('firebase/firestore');
+                const ledgerRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers');
+                await deleteDoc(doc(ledgerRef, `fin_int_${id}`)); // 刪除利息帳
+                await deleteDoc(doc(ledgerRef, `fin_prp_${id}`)); // 刪除本金帳
+            } catch (e) {
+                console.error("連動刪除總帳失敗", e);
+            }
+        }
+    };
+
+    // ★ 修正 2：結算利息時，改用 setDoc 實現冪等操作 (Idempotent Write)，防止重複產生帳目
+    const handleSettleFinancing = async (f: any) => {
         const endDate = new Date().toISOString().split('T')[0]; 
         const start = new Date(f.startDate);
         const end = new Date(endDate);
@@ -543,10 +576,6 @@ const VehicleFormModal = ({
         const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         const actualDays = diffDays > 0 ? diffDays : 1; 
 
-        // ★ 核心結息邏輯升級 2.0：
-        // 1. 首 3 個月內結算，按 3 個月計。
-        // 2. 超過 3 個月但多出的天數在 30 天內，多出部分按天計息。
-        // 3. 多出天數超過 30 天，視為進入下一期 (共收 6 個月利息)。
         let calculatedInterest = 0;
         let billingDesc = "";
         const threeMonthsInDays = 90;
@@ -562,38 +591,38 @@ const VehicleFormModal = ({
                 calculatedInterest = Math.round(baseInterest + dailyInterest);
                 billingDesc = `首期 3 個月 + 按天計息 (${remainingDays}天)`;
             } else {
-                // 超過 30 天，算作 6 個月
                 calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (6 / 12));
                 billingDesc = "滿 3 個月且逾期超 30 天，以 6 個月計";
             }
         }
 
         const updated = { 
-            ...f, 
-            status: 'Settled', 
-            endDate: endDate, 
-            actualInterest: calculatedInterest, 
-            actualDays: actualDays,
-            billedMonths: billingDesc // 複用此欄位存儲計費說明
+            ...f, status: 'Settled', endDate: endDate, 
+            actualInterest: calculatedInterest, actualDays: actualDays, billedMonths: billingDesc 
         };
         safeUpdateFinancing((v.financingRecords || []).map((x: any) => x.id === f.id ? updated : x));
         
         if (db && appId && staffId) {
             try {
-                const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                const { doc, setDoc, serverTimestamp, collection } = await import('firebase/firestore');
+                const ledgerRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers');
+                
+                // 使用確定的 ID：`fin_int_${f.id}` 與 `fin_prp_${f.id}`
+                // { merge: true } 確保重複點擊時只會覆蓋/更新，絕對不會產生多筆重複紀錄
                 if (calculatedInterest > 0) {
-                    await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                    await setDoc(doc(ledgerRef, `fin_int_${f.id}`), { 
                         partner: f.lenderName, date: endDate, type: 'payable', amount: calculatedInterest, 
                         note: `[系統結算] ${v.regMark || '未出牌'} 融資利息 (${billingDesc})`, sourceModule: 'vehicle_finance',
                         vehicleId: v.id, createdAt: serverTimestamp(), createdBy: staffId 
-                    });
+                    }, { merge: true });
                 }
-                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                await setDoc(doc(ledgerRef, `fin_prp_${f.id}`), { 
                     partner: f.lenderName, date: endDate, type: 'payable', amount: f.principal, 
                     note: `[系統結算] ${v.regMark || '未出牌'} 融資本金歸還`, sourceModule: 'vehicle_finance',
                     vehicleId: v.id, createdAt: serverTimestamp(), createdBy: staffId 
-                });
-                alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費模式: ${billingDesc}\n產生利息: $${calculatedInterest.toLocaleString()}\n\n系統已自動將本金與利息轉入【財務總覽 -> 行家來往】的應付帳款中！`);
+                }, { merge: true });
+
+                alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費模式: ${billingDesc}\n產生利息: $${calculatedInterest.toLocaleString()}\n\n系統已自動將本金與利息同步至【財務總覽】！`);
             } catch (err) {
                 console.error("連動寫入總帳失敗", err);
                 alert(`結息成功，但連動寫入財務總帳失敗，請手動補登。`);
