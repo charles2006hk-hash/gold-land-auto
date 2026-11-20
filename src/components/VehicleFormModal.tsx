@@ -530,23 +530,7 @@ const VehicleFormModal = ({
         }
     };
 
-    const handleDeleteFinancing = async (id: string) => {
-        if(!confirm("確定刪除此筆墊資記錄？\n⚠️ 若已結算，系統將同步刪除【財務總覽】中的連動帳目。")) return;
-        
-        safeUpdateFinancing((v.financingRecords || []).filter((f: any) => f.id !== id));
-
-        // 執行連動刪除 (透過確定的文件 ID)
-        if (db && appId) {
-            try {
-                const { doc, deleteDoc } = await import('firebase/firestore');
-                const ledgerRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers');
-                await deleteDoc(doc(ledgerRef, `fin_int_${id}`)); // 刪除利息帳
-                await deleteDoc(doc(ledgerRef, `fin_prp_${id}`)); // 刪除本金帳
-            } catch (e) {
-                console.error("連動刪除總帳失敗", e);
-            }
-        }
-    };
+   
 
    // ★ 修正 1：刪除墊資時，同時精準刪除總帳中的連動紀錄
     const handleDeleteFinancing = async (id: string) => {
