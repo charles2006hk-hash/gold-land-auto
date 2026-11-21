@@ -492,11 +492,11 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
 
     return (
         <>
-          {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
+          {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 xl:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
-           <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
-                ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
-                ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
+           <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none xl:h-full xl:relative 
+                ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full xl:translate-x-0'} 
+                ${isSidebarCollapsed ? 'xl:w-16' : 'xl:w-64'}`}
             >
             <div className="absolute inset-0 w-full h-full overflow-hidden opacity-25 pointer-events-none z-0">
                 <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
@@ -2648,22 +2648,7 @@ const deleteVehicle = async (id: string) => {
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
        
-        <style>{`
-            /* 🚀 解除 fixed 鎖定，恢復原生 GPU 滾動效能 */
-            html, body, #__next { 
-                margin: 0 !important; 
-                padding: 0 !important;
-                width: 100% !important; 
-                height: 100% !important; 
-                overflow: hidden !important; 
-                background-color: #020617 !important; 
-                overscroll-behavior: none !important;
-                -webkit-tap-highlight-color: transparent;
-                -webkit-overflow-scrolling: touch;
-            }
-            @media (min-width: 768px) {
-                html, body, #__next { background-color: #f1f5f9 !important; }
-            }
+       <style>{`
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
@@ -2688,8 +2673,6 @@ const deleteVehicle = async (id: string) => {
               {globalToast.text}
           </div>
       )}
-
-      {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
       <Sidebar 
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -2704,9 +2687,9 @@ const deleteVehicle = async (id: string) => {
       />
            
       {/* 🚀 移除了 main 的 transition-all 動畫 */}
-      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:p-8 md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] xl:p-8 xl:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
         
-        <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-3 shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
+        <div className="xl:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-2 shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-2 z-20">
             <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
             <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
             <div className="flex-shrink-0 scale-110 mr-1">
