@@ -6,20 +6,21 @@
    ★★★ 原生 App 沉浸式全螢幕設定 (基礎共用) ★★★ 
 ======================================================== */
 html, body {
-  /* 1. 絕對鎖定物理邊界：消除底部與右側的白邊間隙 */
+  /* 1. 絕對鎖定物理邊界：改用 100% 與動態高度變數，避免橫直向旋轉產生白縫 */
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  width: 100vw;
-  height: 100dvh; /* 使用動態視口高度，完美貼合 iOS 底部 */
+  width: 100%;
+  height: var(--app-height, 100dvh);
   overflow: hidden;
 
   /* 預設深色(配合載入畫面)，讓 JS 可以接管變色，達成平滑漸變 */
   background-color: #020617; 
   transition: background-color 0.4s ease-in-out; 
   
-  /* 防止 iPhone Safari 橡皮筋效應與選取反白 */
+  /* 防止 iPhone Safari 橡皮筋效應、文字自動放大與選取反白 */
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
+  -webkit-text-size-adjust: 100%;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -39,6 +40,28 @@ html, body {
 input, textarea, [contenteditable="true"] {
   -webkit-user-select: auto;
   user-select: auto;
+}
+
+/* ========================================================
+   ★ 終極自適應引擎：基於容器實際剩餘寬度 (Intrinsic Grid)
+   供 Dashboard / 智能圖庫 / 財務面板共用，不依賴死板 md:/lg:
+======================================================== */
+.auto-grid-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 0.75rem;
+}
+
+.auto-grid-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 1rem;
+}
+
+.auto-grid-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 1rem;
 }
 
 /* ========================================================
@@ -80,34 +103,29 @@ input, textarea, [contenteditable="true"] {
 /* ========================================================
    ★ iPhone Duo 展開模式：Tesla 沉浸式滿版適配 (嚴格隔離)
 ======================================================== */
-
-/* 1. 強制將所有底板與容器結構全部染成統一的淺灰色，徹底消滅底部白縫！ */
 html.is-iphone-duo,
 html.is-iphone-duo body,
 html.is-iphone-duo #__next,
 html.is-iphone-duo body > div:first-child,
 html.is-iphone-duo main {
-    background-color: #f1f5f9 !important;
+  background-color: #f1f5f9 !important;
 }
 
-/* 2. 強制 React 根節點撐破實體邊界 */
 html.is-iphone-duo body > div:first-child,
 html.is-iphone-duo #__next {
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important; /* 捨棄 dvh，改用 100% 確保完全緊貼 fixed body 的最底端 */
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-/* 3. 釋放主佈局空間：吃掉右側黑邊，並利用 padding-bottom 將內容推離底部橫條 */
 html.is-iphone-duo main {
-    padding-right: max(0.5rem, calc(env(safe-area-inset-right) * 0.2)) !important;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+  padding-right: max(0.5rem, calc(env(safe-area-inset-right) * 0.2)) !important;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
 }
 
-/* 4. 強制懸浮按鈕 (FAB) 無視安全區，直接進入右側 Tools Bar 區域！ */
 html.is-iphone-duo .fixed.bottom-6.right-4,
 html.is-iphone-duo .fixed.bottom-6.md\:right-6 {
-    right: 24px !important;
-    bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
+  right: 24px !important;
+  bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
 }
