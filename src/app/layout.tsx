@@ -12,8 +12,7 @@ const fontMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// ★ 核心修復 1：viewport-fit=cover 允許背景穿透到相機/狀態列區域，吃掉 Tools bar
-// ★ 修正 themeColor 為 #f8fafc (slate-50) 消滅旋轉時的黑色斷層
+// ★ 核心修復：viewport-fit=cover 允許背景穿透至狀態列，並鎖定縮放防止橫直向切換錯亂
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -49,15 +48,28 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if (navigator.userAgent.indexOf('Windows') !== -1) {
-                document.documentElement.classList.add('is-windows');
-              }
-              var isIphone = /iPhone/i.test(navigator.userAgent);
-              var isUnfolded = window.screen.width > 500 && window.screen.height > 500;
-              var isDualScreen = window.matchMedia && window.matchMedia('(horizontal-viewport-segments: 2)').matches;
-              if ((isIphone && isUnfolded) || isDualScreen) {
-                document.documentElement.classList.add('is-iphone-duo');
-              }
+              (function() {
+                if (navigator.userAgent.indexOf('Windows') !== -1) {
+                  document.documentElement.classList.add('is-windows');
+                }
+                function syncDeviceLayout() {
+                  var isIphone = /iPhone/i.test(navigator.userAgent);
+                  var isUnfolded = window.screen.width > 500 && window.screen.height > 500;
+                  var isDualScreen = window.matchMedia && window.matchMedia('(horizontal-viewport-segments: 2)').matches;
+                  if ((isIphone && isUnfolded) || isDualScreen) {
+                    document.documentElement.classList.add('is-iphone-duo');
+                  } else {
+                    document.documentElement.classList.remove('is-iphone-duo');
+                  }
+                  // 動態同步真實可視高度，解決 iOS 橫直向切換時 100vh 殘留問題
+                  document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+                }
+                syncDeviceLayout();
+                window.addEventListener('resize', syncDeviceLayout);
+                window.addEventListener('orientationchange', function() {
+                  setTimeout(syncDeviceLayout, 150);
+                });
+              })();
             `,
           }}
         />
