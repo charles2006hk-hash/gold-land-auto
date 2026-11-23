@@ -2328,13 +2328,19 @@ const VehicleFormModal = ({
 
                         {/* 📌 極簡精緻化總結條 (吸頂) */}
                         <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-5 mt-[-1rem] md:mt-[-1.5rem]">
-                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
-                                <span>買車本金 <span className="font-bold text-red-600">{formatCurrency(baseCost)}</span></span>
-                                <span className="text-slate-300">+</span>
-                                <span>維修雜費 <span className="font-bold text-red-500">{formatCurrency(totalExpenses)}</span></span>
-                                <span className="text-slate-300">=</span>
-                                <span className="text-red-800 font-black text-sm md:text-base ml-1">總成本: {formatCurrency(totalCostAll)}</span>
-                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
+                               <span>買車本金 <span className="font-bold text-red-600">{formatCurrency(baseCost)}</span></span>
+                               <span className="text-slate-300">+</span>
+                               <span>維修雜費 <span className="font-bold text-red-500">{formatCurrency(totalExpenses)}</span></span>
+                               {totalFinancingInterest > 0 && (
+                                   <>
+                                       <span className="text-slate-300">+</span>
+                                       <span>墊資利息 <span className="font-bold text-purple-600">{formatCurrency(totalFinancingInterest)}</span></span>
+                                   </>
+                               )}
+                               <span className="text-slate-300">=</span>
+                               <span className="text-red-800 font-black text-sm md:text-base ml-1">總成本: {formatCurrency(totalCostAll)}</span>
+                           </div>
                             <div className="flex items-center gap-3 text-xs md:text-sm font-medium">
                                 {hasFullAccess && (
                                     <span className={`font-bold ${netProfit > 0 ? 'text-emerald-600' : 'text-red-600'} flex items-center pr-3 border-r border-slate-200`}>
@@ -2576,7 +2582,7 @@ const VehicleFormModal = ({
                                                 <div className="text-[10px] text-slate-500 font-mono flex-1 truncate">
                                                     起息: {f.startDate} 
                                                     {f.status === 'Settled' 
-                                                        ? ` | 結算: ${f.endDate} (${f.actualDays}天/收 ${f.billedMonths || 3}個月)`
+                                                       ? ` | 結算: ${f.endDate} (${f.actualDays}天 / ${typeof f.billedMonths === 'number' ? `收 ${f.billedMonths}個月` : (f.billedMonths || '3個月')})`
                                                         : ` | 至今: ${currentDays} 天 (產生利息: ${formatCurrency(currentInterest)})`
                                                     }
                                                 </div>
