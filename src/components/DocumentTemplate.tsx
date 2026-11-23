@@ -4,7 +4,11 @@
 import React from 'react';
 import { Check } from 'lucide-react';
 
-const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
+
+// 防止浮點數運算誤差 (精確至小數點後兩位)
+const roundCurrency = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
 
 export const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
     <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
@@ -72,17 +76,38 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         address: activeVehicle.customerAddress || '' 
     };
 
-    const price = Number(String(activeVehicle.price).replace(/,/g, '')) || 0;
-    const ovFee = Number(String((activeVehicle as any).overseasTotalFee).replace(/,/g, '')) || 0;
-    const hkFee = Number(String((activeVehicle as any).localTotalFee).replace(/,/g, '')) || 0;
-    const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+    const price = roundCurrency(Number(String(activeVehicle.price).replace(/,/g, '')) || 0);
+    const ovFee = roundCurrency(Number(String((activeVehicle as any).overseasTotalFee).replace(/,/g, '')) || 0);
+    const hkFee = roundCurrency(Number(String((activeVehicle as any).localTotalFee).replace(/,/g, '')) || 0);
+    const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? roundCurrency(ovFee + hkFee) : 0;
     
     const basePrice = ((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
-    const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
-    const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
+    const extrasTotal = roundCurrency(
+        itemsToRender
+            .filter((i: any) => !i.isFree)
+            .reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0)
+    );
+    const totalPaid = roundCurrency(
+        depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0)
+    );
     
-    const balance = (basePrice + extrasTotal) - totalPaid;
+    const balance = roundCurrency(basePrice + extrasTotal - totalPaid);
     const deposit = totalPaid;
+
+    // ★ 統一格式化每筆收款的「支付方式」與「備註」(支援所有單據類型)
+    const formatPaymentMeta = (item: any) => {
+        const methodMap: Record<string, string> = {
+            Cheque: '支票',
+            Transfer: '過數',
+            Cash: '現金',
+            FPS: '轉數快',
+            Card: '信用卡',
+            'Trade-in': '對數',
+        };
+        const methodText = item.method ? `[${methodMap[item.method] || item.method}]` : '';
+        const remarkText = item.remark || item.note ? ` - ${item.remark || item.note}` : '';
+        return `${methodText}${remarkText}`;
+    };
 
     const numberToEnglishWords = (n: number) => {
         if (n === 0 || !n) return 'ZERO ONLY';
@@ -235,28 +260,28 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             </div>
                         </div>
 
-                        {/* ★ 修復：發票車輛相片輸出 (完美支援開單系統打勾，若無手動選圖則自動抓第一張) */}
-                                {previewDoc?.formData?.includeImage && (previewDoc?.formData?.selectedImage || carPhotos[0]) ? (
-                                    <div className="mb-4 break-inside-avoid w-full">
-                                        <div className="border border-slate-300 p-2 rounded-lg bg-slate-50 flex justify-center items-center overflow-hidden">
-                                            <img 
-                                                src={previewDoc.formData.selectedImage || carPhotos[0]} 
-                                                alt="Vehicle Reference" 
-                                                className="max-h-[300px] w-auto object-contain rounded shadow-sm"
-                                            />
-                                        </div>
+                        {/* 車輛相片輸出 */}
+                        {previewDoc?.formData?.includeImage && (previewDoc?.formData?.selectedImage || carPhotos[0]) ? (
+                            <div className="mb-4 break-inside-avoid w-full">
+                                <div className="border border-slate-300 p-2 rounded-lg bg-slate-50 flex justify-center items-center overflow-hidden">
+                                    <img 
+                                        src={previewDoc.formData.selectedImage || carPhotos[0]} 
+                                        alt="Vehicle Reference" 
+                                        className="max-h-[300px] w-auto object-contain rounded shadow-sm"
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            carPhotos.length > 0 && !isBill && (
+                                <div className="mb-2 relative">
+                                    <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
+                                        {carPhotos.map((url: string, idx: number) => (
+                                            <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                        ))}
                                     </div>
-                                ) : (
-                                    carPhotos.length > 0 && !isBill && (
-                                        <div className="mb-2 relative">
-                                            <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
-                                                {carPhotos.map((url: string, idx: number) => (
-                                                    <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )
-                                )}
+                                </div>
+                            )
+                        )}
 
                         {hasOrderDetails && (
                             <div className="mb-2">
@@ -286,7 +311,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                     ))}
                                     {depositItems.map((item: any, idx: number) => (
-                                        <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1 font-bold pl-4">Less: {item.label}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td></tr>
+                                        <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
+                                            <td className="border p-1 font-bold pl-4">
+                                                Less: {item.label}
+                                                <span className="text-[8px] font-normal ml-1 text-blue-500">{formatPaymentMeta(item)}</span>
+                                            </td>
+                                            <td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td>
+                                        </tr>
                                     ))}
                                     <tr className="bg-red-50/50 font-black"><td className="border p-1 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(balance)}</td></tr>
                                     {(activeVehicle as any).isFinance && (
@@ -301,7 +332,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 ) : (
                     <>
                         {isReceipt ? (
-                            // ★★★ 收據 Receipt 全新排版 (包含明細與車輛資訊) ★★★
+                            // ★★★ 收據 Receipt 排版 (包含明細、支付方式/備註與車輛資訊) ★★★
                             <div className="border-[3px] border-double border-slate-800 p-6 mb-4 relative bg-white">
                                 <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
                                     <img src={COMPANY_INFO?.logo_url || ''} className="w-64 h-64 object-contain grayscale" />
@@ -322,7 +353,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[11px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">{numberToEnglishWords(deposit)}</div>
                                     </div>
                                     
-                                    {/* 升級版：多列明細清單 */}
+                                    {/* 多列明細清單 (含每筆收款方式與備註) */}
                                     <div className="flex items-start mt-2">
                                         <div className="w-36 font-bold text-slate-700 leading-tight pt-1">in payment of<br/><span className="text-[10px] font-medium text-slate-500">係付</span></div>
                                         <div className="flex-1 border-b border-slate-400 pb-2">
@@ -330,8 +361,11 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                                 <tbody>
                                                     {depositItems.map((item: any, idx: number) => (
                                                         <tr key={idx}>
-                                                            <td className="py-1 font-bold text-slate-800">• {item.label}</td>
-                                                            <td className="py-1 text-right font-mono font-bold">{formatCurrency(item.amount)}</td>
+                                                            <td className="py-1 font-bold text-slate-800">
+                                                                • {item.label}
+                                                                <span className="text-[9px] text-slate-500 font-normal ml-1">{formatPaymentMeta(item)}</span>
+                                                            </td>
+                                                            <td className="py-1 text-right font-mono font-bold text-blue-700">{formatCurrency(item.amount)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -368,7 +402,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             </div>
                         ) : (
                             <>
-                                {/* ★★★ 發票 Invoice 升級版客戶渲染區塊 ★★★ */}
+                                {/* ★★★ 發票 Invoice 客戶渲染區塊 ★★★ */}
                                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-4 mt-2">
                                     <div className="w-1/2 space-y-1.5">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bill To / 致：</h4>
@@ -424,10 +458,16 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                                 <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                             ))}
                                             {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
-                                                <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-1 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td></tr>
+                                                <tr key={`dep-${idx}`} className="border-b bg-blue-50/30">
+                                                    <td className="p-1 font-bold text-blue-700 pl-4">
+                                                        Less: {item.label} (已扣除/已付)
+                                                        <span className="text-[8px] font-normal ml-1 text-blue-500">{formatPaymentMeta(item)}</span>
+                                                    </td>
+                                                    <td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td>
+                                                </tr>
                                             ))}
                                         </tbody>
-                                        <tfoot><tr className="bg-slate-100 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">Total Due (應付總額)</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(extrasTotal - deposit)}</td></tr></tfoot>
+                                        <tfoot><tr className="bg-slate-100 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">Total Due (應付總額)</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(roundCurrency(extrasTotal - deposit))}</td></tr></tfoot>
                                     </table>
                                 ) : (
                                     <table className="w-full text-[9px] border-collapse mb-4">
@@ -438,7 +478,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                                 <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                             ))}
                                             {depositItems.map((item: any, idx: number) => (
-                                                <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-1 font-bold pl-4">Less: {item.label}</td><td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td></tr>
+                                                <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
+                                                    <td className="p-1 font-bold pl-4">
+                                                        Less: {item.label}
+                                                        <span className="text-[8px] font-normal ml-1 text-blue-500">{formatPaymentMeta(item)}</span>
+                                                    </td>
+                                                    <td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td>
+                                                </tr>
                                             ))}
                                             {(activeVehicle as any).isFinance && (
                                                 <tr className="bg-cyan-50/30 text-[9px]">
@@ -473,8 +519,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                         ) : (
                             <>
-                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
-                                本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(roundCurrency(balance + deposit))}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(roundCurrency(balance + deposit))}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                 
                                 {activeType === 'purchase_contract' && showPurchaseGuarantees && (
                                     <div className="mt-1.5 pt-1.5 border-t border-slate-300">
