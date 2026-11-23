@@ -1053,11 +1053,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                                     const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
                                                                     const remarkText = item.remark ? ` - ${item.remark}` : '';
                                                                     return (
-                                                                        <tr key={idx}>
-                                                                            <td className="py-1 font-bold text-slate-800">
-                                                                                • {item.label} <span className="text-[9px] text-slate-500 font-normal">{methodText}{remarkText}</span>
+                                                                        <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
+                                                                            <td className="border p-1 font-bold pl-4">
+                                                                                Less: {item.label} <span className="text-[8px] font-normal ml-1 text-blue-500">{methodText}{remarkText}</span>
                                                                             </td>
-                                                                            <td className="py-1 text-right font-mono font-bold text-blue-700">{formatCurrency(item.amount)}</td>
+                                                                            <td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td>
                                                                         </tr>
                                                                     );
                                                                 })}
