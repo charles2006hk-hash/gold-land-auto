@@ -61,13 +61,20 @@ export default function RootLayout({
                   } else {
                     document.documentElement.classList.remove('is-iphone-duo');
                   }
-                  // 動態同步真實可視高度，解決 iOS 橫直向切換時 100vh 殘留問題
-                  document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+                  // ★ 優先採用 visualViewport.height，精準對應 iOS 旋轉後的實際可視高度
+                  var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+                  document.documentElement.style.setProperty('--app-height', h + 'px');
                 }
                 syncDeviceLayout();
                 window.addEventListener('resize', syncDeviceLayout);
+                if (window.visualViewport) {
+                  window.visualViewport.addEventListener('resize', syncDeviceLayout);
+                }
                 window.addEventListener('orientationchange', function() {
-                  setTimeout(syncDeviceLayout, 150);
+                  // iOS 旋轉動畫約需 300~450ms，分段重算徹底消滅底部空白
+                  setTimeout(syncDeviceLayout, 100);
+                  setTimeout(syncDeviceLayout, 300);
+                  setTimeout(syncDeviceLayout, 500);
                 });
               })();
             `,
