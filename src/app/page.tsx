@@ -660,6 +660,9 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [customRemark, setCustomRemark] = useState(vehicle.salesRemarks || '');
+    // ★ 新增：全螢幕相片瀏覽器狀態 (Lightbox)
+    const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+    const touchStartX = useRef<number | null>(null);
 
     useEffect(() => {
         if (!db || !vehicle.id) return;
@@ -678,33 +681,46 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                 return !isDocType && !hasDocTag;
             });
 
-            vehiclePhotos.sort((a, b) => {
-                const timeA = a.createdAt?.seconds || 0;
-                const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA; 
-            });
-
+            vehiclePhotos.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             vehiclePhotos.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
             
-            setPhotos(vehiclePhotos.map(i => i.url).slice(0, 6)); 
+            setPhotos(vehiclePhotos.map(i => i.url)); 
             setLoading(false);
         });
         return () => unsub();
     }, [vehicle.id]);
 
+    // 鍵盤左右鍵與 ESC 支援
+    useEffect(() => {
+        if (lightboxIdx === null) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setLightboxIdx(null);
+            if (e.key === 'ArrowRight') setLightboxIdx(prev => (prev !== null ? (prev + 1) % photos.length : null));
+            if (e.key === 'ArrowLeft') setLightboxIdx(prev => (prev !== null ? (prev - 1 + photos.length) % photos.length : null));
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [lightboxIdx, photos.length]);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        touchStartX.current = e.touches[0].clientX;
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (touchStartX.current === null || lightboxIdx === null) return;
+        const diff = touchStartX.current - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 40) {
+            if (diff > 0) setLightboxIdx((lightboxIdx + 1) % photos.length);
+            else setLightboxIdx((lightboxIdx - 1 + photos.length) % photos.length);
+        }
+        touchStartX.current = null;
+    };
+
     const handlePrint = () => {
         const content = document.getElementById('share-content');
         if (content) {
-            const parts = [
-                vehicle.year,
-                vehicle.make,
-                vehicle.model,
-                vehicle.seating ? `${vehicle.seating}座` : ''
-            ].filter(Boolean); 
-            
-            const fileName = parts.join('_').replace(/\s+/g, '_');
-            
-            triggerCardPrint(content.outerHTML, fileName);
+            const parts = [vehicle.year, vehicle.make, vehicle.model, vehicle.seating ? `${vehicle.seating}座` : ''].filter(Boolean);
+            triggerCardPrint(content.outerHTML, parts.join('_').replace(/\s+/g, '_'));
         }
     };
 
@@ -712,10 +728,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         if (!expiryDateStr) return '未出牌 / 無資料';
         const expiry = new Date(expiryDateStr);
         const today = new Date();
-        const diffTime = expiry.getTime() - today.getTime();
-        
-        if (diffTime < 0) return '已過期';
-        
+        if (expiry.getTime() - today.getTime() < 0) return '已過期';
         const diffMonths = (expiry.getFullYear() - today.getFullYear()) * 12 + (expiry.getMonth() - today.getMonth());
         if (diffMonths === 0) return `不足 1 個月 (到期: ${expiryDateStr})`;
         return `剩餘約 ${diffMonths} 個月 (到期: ${expiryDateStr})`;
@@ -728,54 +741,59 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         const mileage = vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-';
         const licenseText = getLicenseMonthsLeft(vehicle.licenseExpiry);
         const priceText = cleanMode ? '' : `\n- 售價: ${new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price || 0)}`;
-
         const text = `【 ${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''} 】\n\n[規格資訊]\n- 顏色: ${color}\n- 里數: ${mileage}\n- 容積: ${engine}\n- 座位: ${seating}\n- 牌費: ${licenseText}${priceText}\n\n[亮點]\n${customRemark || vehicle.salesRemarks || ''}`.trim();
 
         navigator.clipboard.writeText(text).then(() => {
             alert('✅ 宣傳文字已成功複製！\n您可以直接前往 WhatsApp 或 WeChat 貼上。');
-        }).catch(err => {
-            console.error('寫入剪貼簿失敗', err);
-            alert('❌ 複製失敗，請檢查瀏覽器權限。');
-        });
+        }).catch(() => alert('❌ 複製失敗，請檢查瀏覽器權限。'));
     };
 
     const downloadAllPhotos = () => {
-        if (photos.length === 0) return alert('目前沒有相片可下載');
-        alert('⏳ 正在為您打包下載相片...\n如果瀏覽器詢問「是否允許下載多個檔案」，請點擊「允許」。\n下載完成後可直接將相片全選並拖曳至 WhatsApp。');
-        
-        photos.forEach((url, index) => {
+        const targetPhotos = photos.slice(0, 6);
+        if (targetPhotos.length === 0) return alert('目前沒有相片可下載');
+        alert('⏳ 正在為您打包下載相片...\n如果瀏覽器詢問「是否允許下載多個檔案」，請點擊「允許」。');
+        targetPhotos.forEach((url, index) => {
             setTimeout(() => {
-                fetch(url)
-                    .then(res => res.blob())
-                    .then(blob => {
-                        const blobUrl = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = blobUrl;
-                        a.download = `${vehicle.regMark || 'Vehicle'}_Photo_${index + 1}.jpg`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        window.URL.revokeObjectURL(blobUrl);
-                    })
-                    .catch(() => {
-                        window.open(url, '_blank');
-                    });
+                fetch(url).then(res => res.blob()).then(blob => {
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = `${vehicle.regMark || 'Vehicle'}_Photo_${index + 1}.jpg`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    window.URL.revokeObjectURL(blobUrl);
+                }).catch(() => window.open(url, '_blank'));
             }, index * 400); 
         });
     };
 
+    const displayPhotos = photos.slice(0, 6);
+
     return (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-sm md:max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div 
+            className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div 
+                className="bg-white w-full max-w-sm md:max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-full"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* ★ 修復：加大 X 按鈕熱區與明確 z-index，避開頂部狀態列 */}
                 <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden flex-none">
                     <span className="text-xs font-bold">{cleanMode ? '✨ 預覽車輛規格 (純淨無公司版)' : '💰 預覽對客推介單 (完整版)'}</span>
-                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
+                    <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onClose(); }} 
+                        className="p-2 -mr-1 hover:bg-white/20 active:bg-white/30 rounded-full cursor-pointer touch-manipulation"
+                        aria-label="關閉預覽"
+                    >
+                        <X size={22}/>
+                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 bg-white" id="share-content">
                     {!cleanMode ? (
                         <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
-                            <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
+                            <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => { e.currentTarget.style.display='none'; }}/>
                             <div>
                                 <h1 className="text-xl font-black text-slate-900 leading-none tracking-wide">{COMPANY_INFO.name_en}</h1>
                                 <h2 className="text-sm font-bold text-slate-600 mt-1 tracking-widest">{COMPANY_INFO.name_ch}</h2>
@@ -806,14 +824,12 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                     {!cleanMode && (
                         <div className={`mb-6 relative group ${!customRemark.trim() ? 'print:hidden' : ''}`}>
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註</span>
-                            
                             <textarea 
                                 value={customRemark} 
                                 onChange={(e) => setCustomRemark(e.target.value)} 
                                 placeholder="在這裡輸入車輛亮點或給客戶的話..." 
                                 className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:hidden min-h-[60px] leading-relaxed"
                             />
-                            
                             {customRemark.trim() && (
                                 <div className="hidden print:block text-sm text-slate-800 bg-blue-50/30 p-3 rounded-lg border border-blue-100 whitespace-pre-wrap leading-relaxed">
                                     {customRemark}
@@ -822,18 +838,27 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         </div>
                     )}
 
+                    {/* ★ 相片區：點擊任意圖片開啟全螢幕瀏覽 */}
                     <div className="mb-4">
                         {loading ? <div className="text-center text-xs py-10">載入圖片中...</div> : 
-                        photos.length > 0 ? (
+                        displayPhotos.length > 0 ? (
                             <div className="flex flex-col gap-2 break-inside-avoid">
-                                <div className="rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[16/7] md:aspect-[21/9]">
-                                    <img src={photos[0]} className="w-full h-full object-cover"/>
+                                <div 
+                                    className="rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[16/7] md:aspect-[21/9] cursor-zoom-in relative group"
+                                    onClick={() => setLightboxIdx(0)}
+                                >
+                                    <img src={displayPhotos[0]} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
+                                    <span className="print:hidden absolute bottom-1.5 right-1.5 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full">共 {photos.length} 張 · 點擊放大</span>
                                 </div>
-                                {photos.length > 1 && (
+                                {displayPhotos.length > 1 && (
                                     <div className="flex gap-2">
-                                        {photos.slice(1, 6).map((url, i) => (
-                                            <div key={i} className="flex-1 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[4/3]">
-                                                <img src={url} className="w-full h-full object-cover"/>
+                                        {displayPhotos.slice(1, 6).map((url, i) => (
+                                            <div 
+                                                key={i} 
+                                                className="flex-1 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[4/3] cursor-zoom-in"
+                                                onClick={() => setLightboxIdx(i + 1)}
+                                            >
+                                                <img src={url} className="w-full h-full object-cover hover:opacity-90 transition-opacity"/>
                                             </div>
                                         ))}
                                     </div>
@@ -851,21 +876,76 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                 </div>
 
                 <div className="p-4 bg-slate-100 border-t print:hidden flex-none flex flex-col gap-2">
-                    
                     <div className="flex gap-2 mb-1">
-                        <button onClick={copyShareText} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
+                        <button type="button" onClick={copyShareText} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
                             <Copy size={16} className="mr-1.5"/> 複製宣傳文字
                         </button>
-                        <button onClick={downloadAllPhotos} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
+                        <button type="button" onClick={downloadAllPhotos} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
                             <DownloadCloud size={16} className="mr-1.5"/> 提取相片
                         </button>
                     </div>
-
-                    <button onClick={handlePrint} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
+                    <button type="button" onClick={handlePrint} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
                         📸 {cleanMode ? '列印純淨規格' : '列印完整推介單'}
                     </button>
                 </div>
             </div>
+
+            {/* ★ 全螢幕相片 Lightbox (支援手指左右滑動 + 左右箭頭按鈕) */}
+            {lightboxIdx !== null && photos[lightboxIdx] && (
+                <div 
+                    className="fixed inset-0 z-[120] bg-black/95 flex items-center justify-center select-none touch-pan-y"
+                    onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    {/* 頂部計數與關閉按鈕 */}
+                    <div className="absolute top-[max(1.5rem,env(safe-area-inset-top))] left-0 right-0 px-4 flex justify-between items-center z-20">
+                        <span className="text-white/90 text-xs font-mono bg-white/10 px-3 py-1.5 rounded-full">
+                            {lightboxIdx + 1} / {photos.length}
+                        </span>
+                        <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
+                            className="p-2.5 bg-white/15 hover:bg-white/30 text-white rounded-full cursor-pointer"
+                            aria-label="關閉相片瀏覽"
+                        >
+                            <X size={24} />
+                        </button>
+                    </div>
+
+                    {/* 左箭頭 */}
+                    {photos.length > 1 && (
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setLightboxIdx((lightboxIdx - 1 + photos.length) % photos.length); }}
+                            className="absolute left-3 md:left-6 z-20 p-3 bg-white/15 hover:bg-white/30 text-white rounded-full cursor-pointer"
+                            aria-label="上一張"
+                        >
+                            <ChevronLeft size={28} />
+                        </button>
+                    )}
+
+                    {/* 主圖 */}
+                    <img 
+                        src={photos[lightboxIdx]} 
+                        alt={`Vehicle Photo ${lightboxIdx + 1}`}
+                        className="max-w-[92vw] max-h-[82dvh] object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+
+                    {/* 右箭頭 */}
+                    {photos.length > 1 && (
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setLightboxIdx((lightboxIdx + 1) % photos.length); }}
+                            className="absolute right-3 md:right-6 z-20 p-3 bg-white/15 hover:bg-white/30 text-white rounded-full cursor-pointer"
+                            aria-label="下一張"
+                        >
+                            <ChevronRight size={28} />
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -2692,7 +2772,8 @@ const deleteVehicle = async (id: string) => {
         <div className="xl:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-2 shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-2 z-20">
             <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
             <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
-            <div className="flex-shrink-0 scale-110 mr-1">
+            {/* ★ 修復：儀表板在 md 以上已有內建鈴鐺，避免重複顯示 */}
+            <div className={`flex-shrink-0 scale-110 mr-1 ${activeTab === 'dashboard' ? 'md:hidden' : ''}`}>
                 <SmartNotificationCenter inventory={visibleInventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} databaseReminders={databaseReminders} />
             </div>
         </div>
