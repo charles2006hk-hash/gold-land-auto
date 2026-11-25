@@ -11,7 +11,10 @@ import {
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 // --- 輔助工具函數 ---
-const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
+// ★ 財務精度保護：消除 JavaScript IEEE-754 浮點數加減誤差
+const roundMoney = (val: number) => Math.round(((val || 0) + Number.EPSILON) * 100) / 100;
+
+const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(roundMoney(amount || 0));
 
 const formatNumberInput = (value: string) => {
     let cleanVal = value.replace(/[^0-9.-]/g, '');
@@ -178,23 +181,23 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         if (reportType === 'receivable') {
             const targetInventory = inventory.filter((v:any) => v.status === 'Sold' || v.status === 'Reserved');
             targetInventory.forEach((v:any) => {
-                const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
-                const totalCarReceivable = (v.price || 0) + salesAddonsTotal;
-                const generalPayments = (v.payments || []).filter((p:any) => !p.relatedTaskId).reduce((s:any, p:any) => s + (p.amount || 0), 0);
-                const carBalance = totalCarReceivable - generalPayments;
+                const salesAddonsTotal = roundMoney(((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (Number(a.amount) || 0)), 0));
+                const totalCarReceivable = roundMoney((Number(v.price) || 0) + salesAddonsTotal);
+                const generalPayments = roundMoney((v.payments || []).filter((p:any) => !p.relatedTaskId).reduce((s:number, p:any) => s + (Number(p.amount) || 0), 0));
+                const carBalance = roundMoney(totalCarReceivable - generalPayments);
                 if (totalCarReceivable > 0 && carBalance > 0) {
                     const date = v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                     data.push({ vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status, rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價` });
                 }
                 
                 (v.maintenanceRecords || []).forEach((m: any) => {
-                    if (m.charge > 0 && m.chargeStatus !== 'Paid') data.push({ vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`, regMark: v.regMark, amount: m.charge, type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}` });
+                    if (m.charge > 0 && m.chargeStatus !== 'Paid') data.push({ vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`, regMark: v.regMark, amount: roundMoney(Number(m.charge)), type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}` });
                 });
 
                 (v.crossBorder?.tasks || []).forEach((task:any) => {
-                    const fee = Number(task.fee) || 0; if (fee <= 0) return;
-                    const taskPaid = (v.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:any, p:any) => s + (p.amount || 0), 0);
-                    const taskBalance = fee - taskPaid;
+                    const fee = roundMoney(Number(task.fee) || 0); if (fee <= 0) return;
+                    const taskPaid = roundMoney((v.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:number, p:any) => s + (Number(p.amount) || 0), 0));
+                    const taskBalance = roundMoney(fee - taskPaid);
                     if (taskBalance > 0) {
                         let safeDate = task.date || v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                         data.push({ vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, regMark: v.regMark, amount: taskBalance, type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}` });
@@ -211,25 +214,25 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     const isTransferred = !isTargetPaid && (exp.status === 'Transferred' || exp.status === 'Transferred_To_Ledger');
                     if (exp.status === targetStatus || isTransferred) {
                         const titlePrefix = isTransferred ? '[已轉總帳]' : '[維修/雜費]';
-                        data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `${titlePrefix} ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: isTransferred ? '已轉總帳' : targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
+                        data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `${titlePrefix} ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: roundMoney(Number(exp.amount)), status: isTransferred ? '已轉總帳' : targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
                     }
                 });
                 (v.maintenanceRecords || []).forEach((m: any) => {
                     const isTransferredMaint = !isTargetPaid && (m.costStatus === 'Transferred' || m.costStatus === 'Transferred_To_Ledger');
                     if (m.cost > 0 && (m.costStatus === targetStatus || isTransferredMaint)) {
                         const titlePrefix = isTransferredMaint ? '[已轉總帳]' : '[售後成本]';
-                        data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `${titlePrefix} ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: isTransferredMaint ? '已轉總帳' : targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
+                        data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `${titlePrefix} ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: roundMoney(Number(m.cost)), status: isTransferredMaint ? '已轉總帳' : targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
                     }
                 });
                 if (isTargetPaid) {
                     (v.acquisition?.payments || []).forEach((p: any) => {
                         const vendorName = v.acquisition?.vendor || '未填寫供應商';
-                        data.push({ vehicleId: v.id, id: p.id, date: p.date, title: `[進貨付款] ${v.make} ${v.model}`, company: vendorName, invoiceNo: p.method, amount: p.amount, status: 'Paid', regMark: v.regMark, rawTitle: `${v.regMark} 進貨付款 ${vendorName} ${p.method}` });
+                        data.push({ vehicleId: v.id, id: p.id, date: p.date, title: `[進貨付款] ${v.make} ${v.model}`, company: vendorName, invoiceNo: p.method, amount: roundMoney(Number(p.amount)), status: 'Paid', regMark: v.regMark, rawTitle: `${v.regMark} 進貨付款 ${vendorName} ${p.method}` });
                     });
                 } else {
-                    const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-                    const acqOffset = Number(v.acquisition?.offsetAmount || 0);
-                    const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
+                    const acqPaid = roundMoney((v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0));
+                    const acqOffset = roundMoney(Number(v.acquisition?.offsetAmount || 0));
+                    const acqBalance = roundMoney((Number(v.costPrice) || 0) - acqPaid - acqOffset);
                     if (acqBalance > 0) {
                         const vendorName = v.acquisition?.vendor || '未填寫供應商';
                         const acqTypeLabel = v.acquisition?.type === 'Import' ? '國外訂車' : '本地收車';
@@ -239,13 +242,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             });
         } else if (reportType === 'sales') {
             data = inventory.filter((v:any) => v.status === 'Sold').map((v:any) => {
-                const baseExpenses = (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
-                const interestExpenses = (v.financingRecords || []).reduce((sum:number, f:any) => sum + (f.status === 'Settled' ? (f.actualInterest || 0) : 0), 0);
-                const totalCost = (v.costPrice || 0) + baseExpenses + interestExpenses; 
-                const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
-                const totalRevenue = (v.price || 0) + cbFees;
+                const baseExpenses = roundMoney((v.expenses || []).reduce((sum:number, e:any) => sum + (Number(e.amount) || 0), 0));
+                const interestExpenses = roundMoney((v.financingRecords || []).reduce((sum:number, f:any) => sum + (f.status === 'Settled' ? (Number(f.actualInterest) || 0) : 0), 0));
+                const totalCost = roundMoney((Number(v.costPrice) || 0) + baseExpenses + interestExpenses); 
+                const cbFees = roundMoney((v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (Number(t.fee) || 0), 0));
+                const totalRevenue = roundMoney((Number(v.price) || 0) + cbFees);
                 let safeSaleDate = v.stockOutDate || (v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-                return { vehicleId: v.id, date: safeSaleDate, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost, rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}` };
+                return { vehicleId: v.id, date: safeSaleDate, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: totalRevenue, cost: totalCost, profit: roundMoney(totalRevenue - totalCost), rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}` };
             });
         }
 
@@ -262,8 +265,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     };
 
     const reportData = generateReportData();
-    const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
-    const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
+    const totalReportAmount = roundMoney(reportData.reduce((sum, item) => sum + (item.amount || 0), 0));
+    const totalReportProfit = reportType === 'sales' ? roundMoney(reportData.reduce((sum, item) => sum + (item.profit || 0), 0)) : 0;
   
 
     // ============================================================================
@@ -273,13 +276,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const ledger: any[] = [];
         
         inventory.forEach((v: any) => {
-            (v.payments || []).forEach((p: any) => ledger.push({ id: `pay_${p.id}`, date: p.date, type: 'IN', amount: Number(p.amount), category: '營業收入 (Sales)', desc: `[收款] ${p.type}`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
-            (v.acquisition?.payments || []).forEach((p: any) => ledger.push({ id: `acq_${p.id}`, date: p.date, type: 'OUT', amount: Number(p.amount), category: '進貨成本 (COGS)', desc: `[進貨付款]`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
+            (v.payments || []).forEach((p: any) => ledger.push({ id: `pay_${p.id}`, date: p.date, type: 'IN', amount: roundMoney(Number(p.amount)), category: '營業收入 (Sales)', desc: `[收款] ${p.type}`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
+            (v.acquisition?.payments || []).forEach((p: any) => ledger.push({ id: `acq_${p.id}`, date: p.date, type: 'OUT', amount: roundMoney(Number(p.amount)), category: '進貨成本 (COGS)', desc: `[進貨付款]`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
             
             // ★ 升級排除：員工代墊 (Staff_Advance) 不消耗公司現金，因此不計入 OUT
-            (v.expenses || []).filter((e:any) => e.status === 'Paid' && e.paymentMethod !== 'Staff_Advance').forEach((e: any) => ledger.push({ id: `exp_${e.id}`, date: e.date, type: 'OUT', amount: Number(e.amount), category: '營運開支 (Expenses)', desc: `[雜費支出] ${e.type} - ${e.company}`, ref: v.regMark || '未出牌', method: e.paymentMethod || '', remark: e.invoiceNo || '', rawDate: new Date(e.date).getTime() }));
-            (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus === 'Paid' && m.charge > 0).forEach((m: any) => ledger.push({ id: `maint_in_${m.id}`, date: m.chargeDate || m.date, type: 'IN', amount: Number(m.charge), category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, ref: v.regMark || '未出牌', method: m.chargeMethod || '', remark: m.chargeRemark || '', rawDate: new Date(m.chargeDate || m.date).getTime() }));
-            (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0 && m.costMethod !== 'Staff_Advance').forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.costDate || m.date, type: 'OUT', amount: Number(m.cost), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', method: m.costMethod || '', remark: m.costRemark || '', rawDate: new Date(m.costDate || m.date).getTime() }));
+            (v.expenses || []).filter((e:any) => e.status === 'Paid' && e.paymentMethod !== 'Staff_Advance').forEach((e: any) => ledger.push({ id: `exp_${e.id}`, date: e.date, type: 'OUT', amount: roundMoney(Number(e.amount)), category: '營運開支 (Expenses)', desc: `[雜費支出] ${e.type} - ${e.company}`, ref: v.regMark || '未出牌', method: e.paymentMethod || '', remark: e.invoiceNo || '', rawDate: new Date(e.date).getTime() }));
+            (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus === 'Paid' && m.charge > 0).forEach((m: any) => ledger.push({ id: `maint_in_${m.id}`, date: m.chargeDate || m.date, type: 'IN', amount: roundMoney(Number(m.charge)), category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, ref: v.regMark || '未出牌', method: m.chargeMethod || '', remark: m.chargeRemark || '', rawDate: new Date(m.chargeDate || m.date).getTime() }));
+            (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0 && m.costMethod !== 'Staff_Advance').forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.costDate || m.date, type: 'OUT', amount: roundMoney(Number(m.cost)), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', method: m.costMethod || '', remark: m.costRemark || '', rawDate: new Date(m.costDate || m.date).getTime() }));
         });
 
         // 公司雜費 (非代墊)
@@ -291,7 +294,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 
                 ledger.push({ 
                     id: `comp_${c.id}`, date: safeDate, 
-                    type: c.flow || 'OUT', amount: Number(c.amount), category: c.category?.includes('股東') ? '資本帳戶 (Capital)' : '營運開支 (Company)', 
+                    type: c.flow || 'OUT', amount: roundMoney(Number(c.amount)), category: c.category?.includes('股東') ? '資本帳戶 (Capital)' : '營運開支 (Company)', 
                     desc: `[公司雜費] ${c.category} - ${c.title}`, ref: c.category?.includes('股東') ? getCleanShareholderName(c.title) : '內部', method: c.paymentMethod || '', 
                     remark: '', rawDate: rawTimestamp 
                 });
@@ -300,14 +303,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
         ledgers.forEach((l: any) => {
             const isCashIn = l.type === 'receivable' ? (l.note.includes('收') || l.note.includes('還')) : (l.note.includes('借入') || l.note.includes('收'));
-            ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: l.method || '', remark: l.refNo || '', rawDate: new Date(l.date).getTime() });
+            ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: roundMoney(Number(l.amount)), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: l.method || '', remark: l.refNo || '', rawDate: new Date(l.date).getTime() });
         });
 
         // 員工代墊還款
         staffLedgers.forEach((l: any) => {
             if (l.type === 'receivable') { 
                 ledger.push({ 
-                    id: `staff_${l.id}`, date: l.date, type: 'OUT', amount: Number(l.amount), 
+                    id: `staff_${l.id}`, date: l.date, type: 'OUT', amount: roundMoney(Number(l.amount)), 
                     category: '營運開支 (Reimbursement)', desc: `[員工報銷] 還款給 ${l.staffId} - ${l.note}`, 
                     ref: l.staffId, method: l.method || 'Transfer', remark: '', rawDate: new Date(l.date).getTime() 
                 });
@@ -327,30 +330,30 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
         
         const thisMonthLedger = rawLedger.filter(l => l.date.startsWith(currentMonthPrefix));
-        const monthIn = thisMonthLedger.filter(l => l.type === 'IN').reduce((sum, l) => sum + l.amount, 0);
-        const monthOut = thisMonthLedger.filter(l => l.type === 'OUT').reduce((sum, l) => sum + l.amount, 0);
-        const monthNet = monthIn - monthOut;
+        const monthIn = roundMoney(thisMonthLedger.filter(l => l.type === 'IN').reduce((sum, l) => sum + l.amount, 0));
+        const monthOut = roundMoney(thisMonthLedger.filter(l => l.type === 'OUT').reduce((sum, l) => sum + l.amount, 0));
+        const monthNet = roundMoney(monthIn - monthOut);
 
         let totalAR = 0;
         let totalAP = 0;
         
         inventory.forEach((v: any) => {
             if (v.status === 'Sold' || v.status === 'Reserved') {
-                const received = (v.payments || []).reduce((acc:number, p:any) => acc + (Number(p.amount) || 0), 0);
-                const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (Number(t.fee) || 0), 0);
-                const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (Number(addon.amount) || 0), 0);
-                const balance = ((v.price || 0) + cbFees + salesAddonsTotal) - received;
-                if (balance > 0) totalAR += balance;
+                const received = roundMoney((v.payments || []).reduce((acc:number, p:any) => acc + (Number(p.amount) || 0), 0));
+                const cbFees = roundMoney((v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (Number(t.fee) || 0), 0));
+                const salesAddonsTotal = roundMoney(((v as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (Number(addon.amount) || 0), 0));
+                const balance = roundMoney(((Number(v.price) || 0) + cbFees + salesAddonsTotal) - received);
+                if (balance > 0) totalAR = roundMoney(totalAR + balance);
             }
             
             if (v.status !== 'Withdrawn') {
-                (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid') totalAP += Number(e.amount); });
-                (v.maintenanceRecords || []).forEach((m:any) => { if (m.costStatus === 'Unpaid' && m.cost > 0) totalAP += Number(m.cost); });
+                (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid') totalAP = roundMoney(totalAP + Number(e.amount)); });
+                (v.maintenanceRecords || []).forEach((m:any) => { if (m.costStatus === 'Unpaid' && m.cost > 0) totalAP = roundMoney(totalAP + Number(m.cost)); });
                 
-                const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-                const acqOffset = Number(v.acquisition?.offsetAmount || 0);
-                const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
-                if (acqBalance > 0) totalAP += acqBalance;
+                const acqPaid = roundMoney((v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0));
+                const acqOffset = roundMoney(Number(v.acquisition?.offsetAmount || 0));
+                const acqBalance = roundMoney((Number(v.costPrice) || 0) - acqPaid - acqOffset);
+                if (acqBalance > 0) totalAP = roundMoney(totalAP + acqBalance);
             }
         });
 
@@ -358,21 +361,21 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const partnerBalances: Record<string, number> = {};
         ledgers.forEach(l => {
             if (!partnerBalances[l.partner]) partnerBalances[l.partner] = 0;
-            partnerBalances[l.partner] += (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount));
+            partnerBalances[l.partner] = roundMoney(partnerBalances[l.partner] + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)));
         });
         Object.values(partnerBalances).forEach(bal => {
-            if (bal > 0) totalAR += bal;
-            else if (bal < 0) totalAP += Math.abs(bal);
+            if (bal > 0) totalAR = roundMoney(totalAR + bal);
+            else if (bal < 0) totalAP = roundMoney(totalAP + Math.abs(bal));
         });
 
         // 加上員工代墊結餘
         let staffPayable = 0;
         staffLedgers.forEach(l => {
-            staffPayable += (l.type === 'payable' ? Number(l.amount) : -Number(l.amount));
+            staffPayable = roundMoney(staffPayable + (l.type === 'payable' ? Number(l.amount) : -Number(l.amount)));
         });
-        if (staffPayable > 0) totalAP += staffPayable;
+        if (staffPayable > 0) totalAP = roundMoney(totalAP + staffPayable);
 
-        const stockValue = inventory.filter((v: any) => v.status === 'In Stock').reduce((sum: number, v: any) => sum + (v.price || 0), 0);
+        const stockValue = roundMoney(inventory.filter((v: any) => v.status === 'In Stock').reduce((sum: number, v: any) => sum + (Number(v.price) || 0), 0));
 
         return { monthIn, monthOut, monthNet, totalAR, totalAP, stockValue };
     };
@@ -382,32 +385,23 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // ============================================================================
     // ★ 股東往來 邏輯 (Shareholder Ledger - 純讀取)
     // ============================================================================
-    // 1. 確保 companyExpenses 有值再做 filter
     const shareholderRecords = (companyExpenses || []).filter(c => c.category?.includes('股東'));
-    
-    
-    // 2. 萃取唯一的股東名單
     const allShareholders = Array.from(new Set(shareholderRecords.map(c => getCleanShareholderName(c.title)))).filter(Boolean).sort();
-    
-    // 3. 搜尋過濾
     const filteredShareholders = allShareholders.filter(s => typeof s === 'string' && s.toLowerCase().includes(shareholderSearch.toLowerCase()));
 
-    // 4. 當前選定股東的歷史與結餘
     const currentShareholderHistory = shareholderRecords
         .filter(c => getCleanShareholderName(c.title) === selectedShareholder)
-        // ★ 核心修復 1：股東往來排序統一使用 dueDate 優先級
         .sort((a,b) => new Date(b.dueDate || b.date || b.paymentDate || 0).getTime() - new Date(a.dueDate || a.date || a.paymentDate || 0).getTime());
         
-    const currentShareholderBalance = currentShareholderHistory.reduce((sum, c) => {
+    const currentShareholderBalance = roundMoney(currentShareholderHistory.reduce((sum, c) => {
         const isDeposit = c.flow === 'IN' || c.category?.includes('入數');
         return sum + (isDeposit ? Number(c.amount) : -Number(c.amount));
-    }, 0);
+    }, 0));
 
 
     // ============================================================================
     // ★ 行家來往 邏輯 (淨化版：切斷與 settings.expenseCompanies 的關聯)
     // ============================================================================
-    // ★ 核心修復：行家名單只從 partner_ledgers 中萃取，不再合併雜費供應商
     const allPartners = Array.from(new Set(ledgers.map(l => l.partner))).filter(Boolean).sort();
     
     let filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
@@ -426,14 +420,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     };
 
     const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const partnerBalance = partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
+    const partnerBalance = roundMoney(partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0));
 
     let displayPartnerHistory = partnerHistory;
     if (isPartnerDateFilter) {
         displayPartnerHistory = partnerHistory.filter(l => l.date >= partnerStart && l.date <= partnerEnd);
     }
-    const periodIn = displayPartnerHistory.filter(l => l.type === 'receivable').reduce((sum, l) => sum + Number(l.amount), 0);
-    const periodOut = displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0);
+    const periodIn = roundMoney(displayPartnerHistory.filter(l => l.type === 'receivable').reduce((sum, l) => sum + Number(l.amount), 0));
+    const periodOut = roundMoney(displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0));
 
     const promptRenamePartner = async (oldName: string) => {
         const newName = window.prompt(`請輸入「${oldName}」的正確名稱：\n\n💡 提示：若輸入另一個已存在的行家名稱（例如把「交Benny」改為「Benny」），系統將會自動合併兩者的帳目！`, oldName);
@@ -443,7 +437,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         if (!confirm(`⚠️ 警告：確定要將全系統中「${oldName}」的所有歷史紀錄全面改為「${cleanNewName}」嗎？\n\n(系統將同步修改：財務總帳、所有車輛成本明細、維修紀錄及收車前手名稱。此操作無法復原！)`)) return;
 
         try {
-            const { collection, query, where, getDocs, writeBatch, doc: firestoreDoc, getDoc } = await import('firebase/firestore');
+            const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore');
             const batch = writeBatch(db);
 
             const ledgerQ = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), where('partner', '==', oldName));
@@ -495,7 +489,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
     const handleAddLedgerRecord = async (e: React.FormEvent) => {
         e.preventDefault();
-        const amt = Number(newLedger.amount.replace(/,/g, ''));
+        const amt = roundMoney(Number(newLedger.amount.replace(/,/g, '')));
         if (!amt || !selectedPartner || !db) return;
         try {
             await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
@@ -569,7 +563,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     partner: selectedPartner,
                     date: item.date || new Date().toISOString().split('T')[0],
                     type: 'payable',
-                    amount: Number(amount),
+                    amount: roundMoney(Number(amount)),
                     note: note,
                     method: 'Transfer',
                     refNo: '',
@@ -674,7 +668,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // ============================================================================
     const handleStaffExpenseSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const amt = Number(staffExpForm.amount.replace(/,/g, ''));
+        const amt = roundMoney(Number(staffExpForm.amount.replace(/,/g, '')));
         if (amt <= 0 || !db || !appId || !staffId) return alert('請輸入有效金額');
 
         setIsSubmittingStaffExp(true);
@@ -752,7 +746,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     };
 
     const myLedgers = staffLedgers.filter(l => l.staffId === (isFullAccess ? selectedStaff : staffId));
-    const myBalance = myLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? -Number(l.amount) : Number(l.amount)), 0);
+    const myBalance = roundMoney(myLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? -Number(l.amount) : Number(l.amount)), 0));
 
     const handleSettleStaffBalance = async () => {
         if (myBalance === 0 || !db) return;
@@ -780,7 +774,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const promptEditStaffLedgerRecord = async (l: any) => {
         const newAmountStr = window.prompt(`請修改金額 (原本: ${l.amount}):`, String(l.amount));
         if (newAmountStr === null) return;
-        const newAmount = Number(newAmountStr.replace(/,/g, ''));
+        const newAmount = roundMoney(Number(newAmountStr.replace(/,/g, '')));
         if (isNaN(newAmount) || newAmount <= 0) return alert('無效金額');
 
         const newNote = window.prompt(`請修改備註 (原本: ${l.note}):`, l.note);
@@ -817,8 +811,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         return true;
     });
 
-    const filteredTotalIn = filteredAccLedger.filter(l => l.type === 'IN').reduce((sum, l) => sum + l.amount, 0);
-    const filteredTotalOut = filteredAccLedger.filter(l => l.type === 'OUT').reduce((sum, l) => sum + l.amount, 0);
+    const filteredTotalIn = roundMoney(filteredAccLedger.filter(l => l.type === 'IN').reduce((sum, l) => sum + l.amount, 0));
+    const filteredTotalOut = roundMoney(filteredAccLedger.filter(l => l.type === 'OUT').reduce((sum, l) => sum + l.amount, 0));
 
     const exportAccountingCSV = () => {
         if (filteredAccLedger.length === 0) { alert('沒有資料可以匯出'); return; }
@@ -832,7 +826,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         link.click();
     };
 
-    // 👇 新增：全域流水帳編輯與刪除功能 (支援總帳、股東、行家、員工報銷)
+    // 👇 全域流水帳編輯與刪除功能 (支援總帳、股東、行家、員工報銷)
     const handleGlobalDelete = async (item: any) => {
         if (!db) return;
         if (item.id.startsWith('pay_') || item.id.startsWith('acq_') || item.id.startsWith('exp_') || item.id.startsWith('maint_')) {
@@ -857,7 +851,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
         const newAmountStr = window.prompt(`修改金額 (目前: ${item.amount}):`, String(item.amount));
         if (newAmountStr === null) return;
-        const newAmount = Number(newAmountStr.replace(/,/g, ''));
+        const newAmount = roundMoney(Number(newAmountStr.replace(/,/g, '')));
         if (isNaN(newAmount) || newAmount <= 0) return alert('無效金額');
 
         let newNote = '';
@@ -880,29 +874,29 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     };
 
     return (
-        <div className="p-2 md:p-4 bg-slate-100/50 rounded-lg shadow-sm h-full min-h-0 overflow-hidden flex flex-col">
+        <div className="p-2 md:p-4 [.is-iphone-duo_&]:p-2 bg-slate-100/50 rounded-lg shadow-sm h-full min-h-0 overflow-hidden flex flex-col">
             
-            {/* ★ 頂部 Header & 導航 ★ */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4 flex-none print:hidden">
-                <div>
-                    <h2 className="text-xl md:text-2xl font-black flex items-center text-slate-800 tracking-tight">
-                        <Briefcase className="mr-2 text-blue-600" size={24}/> 財務總覽 (Financial Hub)
+            {/* ★ 頂部 Header & 導航 (僅 iPhone Duo 壓縮高度釋放空間) ★ */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4 [.is-iphone-duo_&]:mb-2 [.is-iphone-duo_&]:gap-2 flex-none print:hidden">
+                <div className="[.is-iphone-duo_&]:shrink-0">
+                    <h2 className="text-xl md:text-2xl [.is-iphone-duo_&]:text-base font-black flex items-center text-slate-800 tracking-tight whitespace-nowrap">
+                        <Briefcase className="mr-2 [.is-iphone-duo_&]:mr-1.5 text-blue-600" size={24}/> 財務總覽 <span className="[.is-iphone-duo_&]:hidden ml-1">(Financial Hub)</span>
                     </h2>
                 </div>
 
                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 w-full md:w-auto overflow-x-auto scrollbar-hide">
                     {isFullAccess && (
                         <>
-                            <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
-                            <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
-                            <button onClick={() => setFinanceTab('shareholder')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'shareholder' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Building2 size={16} className="mr-1.5"/> 股東往來</button>
-                            <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
-                            <button onClick={() => setFinanceTab('lender')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'lender' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><DollarSign size={16} className="mr-1.5"/> 資金池結算</button>
-                            <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
-                            <button onClick={() => setFinanceTab('capital')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'capital' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="mr-1.5"/> 資金預算沙盤</button>
+                            <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
+                            <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
+                            <button onClick={() => setFinanceTab('shareholder')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'shareholder' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Building2 size={16} className="mr-1.5"/> 股東往來</button>
+                            <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
+                            <button onClick={() => setFinanceTab('lender')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'lender' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><DollarSign size={16} className="mr-1.5"/> 資金池結算</button>
+                            <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
+                            <button onClick={() => setFinanceTab('capital')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'capital' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="mr-1.5"/> 資金預算沙盤</button>
                         </>
                     )}
-                    <button onClick={() => setFinanceTab('staff')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'staff' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><CreditCard size={16} className="mr-1.5"/> 員工報銷</button>
+                    <button onClick={() => setFinanceTab('staff')} className={`flex-1 md:flex-none px-4 py-2 text-sm [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'staff' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><CreditCard size={16} className="mr-1.5"/> 員工報銷</button>
                 </div>
             </div>
 
@@ -910,48 +904,48 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 1: 財務數據 (Dashboard) */}
             {/* ========================================== */}
             {financeTab === 'dashboard' && isFullAccess && (
-                <div className="flex-1 overflow-y-auto animate-fade-in pb-10">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="flex-1 overflow-y-auto animate-fade-in pb-10 [.is-iphone-duo_&]:pb-20">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 [.is-iphone-duo_&]:gap-3 mb-6">
+                        <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 [.is-iphone-duo_&]:gap-3 bg-white p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-sm border border-slate-200">
                             <div className="col-span-full mb-2 border-b border-slate-100 pb-2">
-                                <h3 className="font-bold text-slate-700 text-lg flex items-center"><CalendarDays size={20} className="mr-2 text-blue-500"/> 本月現金流狀況 (Cash Flow - {new Date().toLocaleString('zh-HK', {month: 'long'})})</h3>
+                                <h3 className="font-bold text-slate-700 text-lg [.is-iphone-duo_&]:text-base flex items-center"><CalendarDays size={20} className="mr-2 text-blue-500"/> 本月現金流狀況 (Cash Flow - {new Date().toLocaleString('zh-HK', {month: 'long'})})</h3>
                             </div>
                             
-                            <div className="bg-emerald-50/50 p-5 rounded-xl border border-emerald-100 relative overflow-hidden group">
+                            <div className="bg-emerald-50/50 p-5 [.is-iphone-duo_&]:p-3.5 rounded-xl border border-emerald-100 relative overflow-hidden group">
                                 <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform"><DollarSign size={80}/></div>
                                 <p className="text-sm font-bold text-emerald-700 mb-1">本月總流入 (Cash In)</p>
-                                <p className="text-3xl font-black font-mono text-emerald-600">{formatCurrency(dashStats.monthIn)}</p>
+                                <p className="text-3xl [.is-iphone-duo_&]:text-2xl font-black font-mono text-emerald-600">{formatCurrency(dashStats.monthIn)}</p>
                             </div>
                             
-                            <div className="bg-red-50/50 p-5 rounded-xl border border-red-100 relative overflow-hidden group">
+                            <div className="bg-red-50/50 p-5 [.is-iphone-duo_&]:p-3.5 rounded-xl border border-red-100 relative overflow-hidden group">
                                 <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform"><DollarSign size={80}/></div>
                                 <p className="text-sm font-bold text-red-700 mb-1">本月總流出 (Cash Out)</p>
-                                <p className="text-3xl font-black font-mono text-red-600">{formatCurrency(dashStats.monthOut)}</p>
+                                <p className="text-3xl [.is-iphone-duo_&]:text-2xl font-black font-mono text-red-600">{formatCurrency(dashStats.monthOut)}</p>
                             </div>
                             
-                            <div className={`p-5 rounded-xl border relative overflow-hidden group ${dashStats.monthNet >= 0 ? 'bg-blue-50/50 border-blue-200' : 'bg-orange-50/50 border-orange-200'}`}>
+                            <div className={`p-5 [.is-iphone-duo_&]:p-3.5 rounded-xl border relative overflow-hidden group ${dashStats.monthNet >= 0 ? 'bg-blue-50/50 border-blue-200' : 'bg-orange-50/50 border-orange-200'}`}>
                                 <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform"><BarChart3 size={80}/></div>
                                 <p className={`text-sm font-bold mb-1 ${dashStats.monthNet >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>本月淨現金流 (Net Cash Flow)</p>
-                                <p className={`text-3xl font-black font-mono ${dashStats.monthNet >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{dashStats.monthNet >= 0 ? '+' : ''}{formatCurrency(dashStats.monthNet)}</p>
+                                <p className={`text-3xl [.is-iphone-duo_&]:text-2xl font-black font-mono ${dashStats.monthNet >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{dashStats.monthNet >= 0 ? '+' : ''}{formatCurrency(dashStats.monthNet)}</p>
                             </div>
                         </div>
 
-                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-lg text-white relative overflow-hidden">
+                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-lg text-white relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-                            <h3 className="font-bold text-slate-300 text-sm mb-4 uppercase tracking-widest">總應收帳款 (Total A/R)</h3>
-                            <p className="text-4xl font-black font-mono text-green-400 mb-2">{formatCurrency(dashStats.totalAR)}</p>
+                            <h3 className="font-bold text-slate-300 text-sm mb-4 [.is-iphone-duo_&]:mb-2 uppercase tracking-widest">總應收帳款 (Total A/R)</h3>
+                            <p className="text-4xl [.is-iphone-duo_&]:text-2xl font-black font-mono text-green-400 mb-2">{formatCurrency(dashStats.totalAR)}</p>
                             <p className="text-xs text-slate-400">包含賣車尾款、代辦費、行家借出款項</p>
                         </div>
 
-                        <div className="bg-gradient-to-br from-slate-100 to-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                            <h3 className="font-bold text-slate-500 text-sm mb-4 uppercase tracking-widest">總應付帳款 (Total A/P)</h3>
-                            <p className="text-4xl font-black font-mono text-red-500 mb-2">{formatCurrency(dashStats.totalAP)}</p>
+                        <div className="bg-gradient-to-br from-slate-100 to-white p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
+                            <h3 className="font-bold text-slate-500 text-sm mb-4 [.is-iphone-duo_&]:mb-2 uppercase tracking-widest">總應付帳款 (Total A/P)</h3>
+                            <p className="text-4xl [.is-iphone-duo_&]:text-2xl font-black font-mono text-red-500 mb-2">{formatCurrency(dashStats.totalAP)}</p>
                             <p className="text-xs text-slate-400">包含未找車房數、墊支款項、行家欠款</p>
                         </div>
 
-                        <div className="bg-gradient-to-br from-slate-100 to-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                            <h3 className="font-bold text-slate-500 text-sm mb-4 uppercase tracking-widest">庫存總值 (Stock Value)</h3>
-                            <p className="text-4xl font-black font-mono text-slate-700 mb-2">{formatCurrency(dashStats.stockValue)}</p>
+                        <div className="bg-gradient-to-br from-slate-100 to-white p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
+                            <h3 className="font-bold text-slate-500 text-sm mb-4 [.is-iphone-duo_&]:mb-2 uppercase tracking-widest">庫存總值 (Stock Value)</h3>
+                            <p className="text-4xl [.is-iphone-duo_&]:text-2xl font-black font-mono text-slate-700 mb-2">{formatCurrency(dashStats.stockValue)}</p>
                             <p className="text-xs text-slate-400">按目前在場車輛之定價計算</p>
                         </div>
                     </div>
@@ -959,17 +953,17 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             )}
 
             {/* ========================================== */}
-            {/* Tab 2: 統計報表 */}
+            {/* Tab 2: 統計報表 (iPhone Duo 允許整區滾動 + 表格保底高度) */}
             {/* ========================================== */}
             {financeTab === 'reports' && isFullAccess && (
-                <div className="flex-1 flex flex-col animate-fade-in min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-none print:hidden">
+                <div className="flex-1 flex flex-col animate-fade-in min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden [.is-iphone-duo_&]:overflow-y-auto [.is-iphone-duo_&]:pb-16">
+                    <div className="flex justify-between items-center p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-100 flex-none print:hidden">
                         <h3 className="font-bold text-slate-700 flex items-center"><FileBarChart size={18} className="mr-2 text-indigo-500"/> 車輛微觀統計</h3>
-                        <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors shadow-sm flex items-center"><Printer size={16} className="mr-2"/> 輸出報表</button>
+                        <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 [.is-iphone-duo_&]:px-3 [.is-iphone-duo_&]:py-1.5 rounded-lg text-sm [.is-iphone-duo_&]:text-xs font-bold hover:bg-slate-800 transition-colors shadow-sm flex items-center"><Printer size={16} className="mr-2"/> 輸出報表</button>
                     </div>
 
-                    <div className="bg-slate-50 p-4 border-b border-slate-200 flex-none print:hidden">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="bg-slate-50 p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-200 flex-none print:hidden">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 [.is-iphone-duo_&]:gap-2">
                             <div className="col-span-2 md:col-span-1">
                                 <label className="block text-[10px] font-bold text-gray-500 mb-1">報表類型</label>
                                 <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border border-slate-200 p-2 rounded-lg text-xs font-bold text-slate-700 bg-white outline-none focus:ring-2 ring-indigo-200 cursor-pointer">
@@ -1021,7 +1015,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-hidden relative bg-white">
+                    <div className="flex-1 [.is-iphone-duo_&]:min-h-[300px] overflow-hidden relative bg-white">
                         <div className="absolute inset-0 overflow-auto scrollbar-thin">
                             <table className="w-full border-collapse text-xs whitespace-nowrap">
                                 <thead className="sticky top-0 bg-slate-100 z-10 text-slate-600 shadow-sm print:bg-transparent print:shadow-none">
@@ -1070,22 +1064,22 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {financeTab === 'shareholder' && isFullAccess && (
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
-                    <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
-                        <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
-                            <h3 className="font-bold text-slate-700 flex items-center mb-3"><Building2 size={18} className="mr-2 text-teal-600"/> 股東資本統計</h3>
+                    <div className="w-full md:w-80 [.is-iphone-duo_&]:w-56 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                        <div className="p-3 md:p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-200 bg-white">
+                            <h3 className="font-bold text-slate-700 flex items-center mb-3 [.is-iphone-duo_&]:mb-2 [.is-iphone-duo_&]:text-sm"><Building2 size={18} className="mr-2 text-teal-600"/> 股東資本統計</h3>
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
-                                    <input value={shareholderSearch} onChange={e => setShareholderSearch(e.target.value)} placeholder="搜尋股東..." className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-teal-200"/>
+                                    <input value={shareholderSearch} onChange={e => setShareholderSearch(e.target.value)} placeholder="搜尋股東..." className="w-full pl-8 pr-3 py-2 [.is-iphone-duo_&]:py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-teal-200"/>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
+                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1 [.is-iphone-duo_&]:pb-16">
                             {filteredShareholders.map((sh, idx) => {
                                 const shRecords = shareholderRecords.filter(c => getCleanShareholderName(c.title) === sh);
-                                const shBal = shRecords.reduce((sum, c) => sum + (c.flow === 'IN' || c.category?.includes('入數') ? Number(c.amount) : -Number(c.amount)), 0);
+                                const shBal = roundMoney(shRecords.reduce((sum, c) => sum + (c.flow === 'IN' || c.category?.includes('入數') ? Number(c.amount) : -Number(c.amount)), 0));
                                 return (
-                                    <div key={idx} onClick={() => setSelectedShareholder(sh)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedShareholder === sh ? 'bg-teal-100 border border-teal-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
+                                    <div key={idx} onClick={() => setSelectedShareholder(sh)} className={`p-2 md:p-3 [.is-iphone-duo_&]:p-2 rounded-xl cursor-pointer transition-all flex flex-col gap-1 flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedShareholder === sh ? 'bg-teal-100 border border-teal-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
                                         <div className="flex justify-between items-center w-full">
                                             <span className={`font-bold text-sm truncate ${selectedShareholder === sh ? 'text-teal-900' : 'text-slate-700'}`}>{sh}</span>
                                         </div>
@@ -1097,14 +1091,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             })}
                             {filteredShareholders.length === 0 && <div className="text-center p-4 text-xs text-slate-400">目前總帳中無股東紀錄</div>}
                         </div>
-                        <div className="p-4 border-t border-slate-200 bg-slate-100/50 flex-none hidden md:block">
+                        <div className="p-4 border-t border-slate-200 bg-slate-100/50 flex-none hidden md:block [.is-iphone-duo_&]:hidden">
                             <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
                                 💡 提示：此頁面數據自動由「公司營運總帳」同步。如需新增或修改股東出入數，請至 <span className="text-teal-700">公司營運總帳 ➔ 日常帳目登錄</span> 處理，並將分類設為「股東入數」等相關項目。
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
+                    <div className="flex-1 flex flex-col relative bg-white overflow-hidden [.is-iphone-duo_&]:overflow-y-auto">
                         {!selectedShareholder ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10 hidden md:flex">
                                 <Building2 size={48} className="mb-4 opacity-30 text-teal-500"/>
@@ -1113,25 +1107,25 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </div>
                         ) : (
                             <>
-                                <div className="p-4 md:p-6 bg-slate-900 text-white flex justify-between items-center flex-none shadow-md z-10">
+                                <div className="p-4 md:p-6 [.is-iphone-duo_&]:p-3 bg-slate-900 text-white flex justify-between items-center flex-none shadow-md z-10">
                                     <div>
-                                        <h3 className="text-xl md:text-2xl font-black tracking-wide mb-1 flex items-center">{selectedShareholder}</h3>
+                                        <h3 className="text-xl md:text-2xl [.is-iphone-duo_&]:text-lg font-black tracking-wide mb-1 flex items-center">{selectedShareholder}</h3>
                                         <p className="text-xs text-slate-400">股東往來帳戶明細 (唯讀)</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">當前資本結餘 (Equity)</p>
-                                        <span className={`text-2xl md:text-3xl font-black font-mono ${currentShareholderBalance > 0 ? 'text-teal-400' : (currentShareholderBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>
+                                        <span className={`text-2xl md:text-3xl [.is-iphone-duo_&]:text-xl font-black font-mono ${currentShareholderBalance > 0 ? 'text-teal-400' : (currentShareholderBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>
                                             {currentShareholderBalance === 0 ? '$0' : `${currentShareholderBalance > 0 ? '+' : '-'}$${Math.abs(currentShareholderBalance).toLocaleString()}`}
                                         </span>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-slate-50">
+                                <div className="flex-1 [.is-iphone-duo_&]:min-h-[260px] overflow-y-auto p-3 md:p-6 [.is-iphone-duo_&]:p-3 [.is-iphone-duo_&]:pb-20 bg-slate-50">
                                     <div className="space-y-3">
                                         {currentShareholderHistory.map(c => {
                                             const isDeposit = c.flow === 'IN' || c.category?.includes('入數');
                                             return (
-                                                <div key={c.id} className="flex justify-between items-center p-4 bg-white rounded-xl border border-slate-200 shadow-sm transition-colors hover:border-teal-300">
+                                                <div key={c.id} className="flex justify-between items-center p-4 [.is-iphone-duo_&]:p-3 bg-white rounded-xl border border-slate-200 shadow-sm transition-colors hover:border-teal-300">
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black flex-shrink-0 ${isDeposit ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700'}`}>
                                                             {isDeposit ? '注' : '抽'}
@@ -1142,7 +1136,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                                 <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 whitespace-nowrap">來自總帳</span>
                                                             </div>
                                                             <div className="text-xs text-slate-400 mt-1 font-mono">
-                                                                {/* ★ 核心修復 3：畫面渲染顯示統一標準 */}
                                                                 {c.dueDate || c.date || c.paymentDate} • {c.paymentMethod || 'Transfer'} 
                                                             </div>
                                                         </div>
@@ -1167,10 +1160,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             )}
 
             {/* ========================================== */}
-            {/* Tab 4: 行家來往 (Partner Ledger) 淨化版 */}
+            {/* Tab 4: 行家來往 (Partner Ledger) — iPhone Duo 專屬防壓扁適配 */}
             {/* ========================================== */}
             {financeTab === 'partner' && isFullAccess && (() => {
-                // ★ 核心修復：行家名單只從 partner_ledgers 中萃取，徹底與 settings.expenseCompanies (雜費供應商) 脫鉤
                 const allPartners = Array.from(new Set(ledgers.map(l => l.partner))).filter(Boolean).sort();
                 
                 let filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
@@ -1189,37 +1181,37 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 };
 
                 const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                const partnerBalance = partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
+                const partnerBalance = roundMoney(partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0));
 
                 let displayPartnerHistory = partnerHistory;
                 if (isPartnerDateFilter) {
                     displayPartnerHistory = partnerHistory.filter(l => l.date >= partnerStart && l.date <= partnerEnd);
                 }
-                const periodIn = displayPartnerHistory.filter(l => l.type === 'receivable').reduce((sum, l) => sum + Number(l.amount), 0);
-                const periodOut = displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0);
+                const periodIn = roundMoney(displayPartnerHistory.filter(l => l.type === 'receivable').reduce((sum, l) => sum + Number(l.amount), 0));
+                const periodOut = roundMoney(displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0));
 
                 return (
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
-                    <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
-                        <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
-                            <h3 className="font-bold text-slate-700 flex items-center mb-3"><Users size={18} className="mr-2 text-amber-500"/> 行家/夥伴名單</h3>
+                    <div className="w-full md:w-80 [.is-iphone-duo_&]:w-56 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                        <div className="p-3 md:p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-200 bg-white">
+                            <h3 className="font-bold text-slate-700 flex items-center mb-3 [.is-iphone-duo_&]:mb-2 [.is-iphone-duo_&]:text-sm"><Users size={18} className="mr-2 text-amber-500"/> 行家/夥伴名單</h3>
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
-                                    <input value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} placeholder="搜尋名稱..." className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-amber-200"/>
+                                    <input value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} placeholder="搜尋名稱..." className="w-full pl-8 pr-3 py-2 [.is-iphone-duo_&]:py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-amber-200"/>
                                 </div>
                                 <button onClick={() => {
                                     const name = prompt('請輸入新行家名稱：');
                                     if (name && name.trim()) setSelectedPartner(name.trim());
-                                }} className="bg-amber-500 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-amber-600 whitespace-nowrap">
+                                }} className="bg-amber-500 text-white px-3 py-2 [.is-iphone-duo_&]:px-2.5 [.is-iphone-duo_&]:py-1.5 rounded-lg text-xs font-bold hover:bg-amber-600 whitespace-nowrap">
                                     + 新增
                                 </button>
                             </div>
                         </div>
-                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
+                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1 [.is-iphone-duo_&]:pb-16">
                             {/* 顯示剛新增但還沒有紀錄的行家 */}
                             {selectedPartner && !filteredPartners.includes(selectedPartner) && (
-                                <div onClick={() => handleSelectPartner(selectedPartner)} className="p-2 md:p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 bg-amber-100 border border-amber-300 shadow-sm">
+                                <div onClick={() => handleSelectPartner(selectedPartner)} className="p-2 md:p-3 [.is-iphone-duo_&]:p-2 rounded-xl cursor-pointer transition-all flex flex-col gap-1 bg-amber-100 border border-amber-300 shadow-sm">
                                     <span className="font-bold text-sm text-amber-900 truncate">{selectedPartner}</span>
                                     <span className="text-[10px] w-fit font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">結餘 $0</span>
                                 </div>
@@ -1227,9 +1219,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                             {filteredPartners.map((partner, idx) => {
                                 const pLedgers = ledgers.filter(l => l.partner === partner);
-                                const pBalance = pLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
+                                const pBalance = roundMoney(pLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0));
                                 return (
-                                    <div key={idx} onClick={() => handleSelectPartner(partner)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
+                                    <div key={idx} onClick={() => handleSelectPartner(partner)} className={`p-2 md:p-3 [.is-iphone-duo_&]:p-2 rounded-xl cursor-pointer transition-all flex flex-col gap-1 flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
                                         <div className="flex justify-between items-center w-full">
                                             <span className={`font-bold text-sm truncate ${selectedPartner === partner ? 'text-amber-900' : 'text-slate-700'}`}>{partner}</span>
                                             {selectedPartner === partner && isFullAccess && (
@@ -1245,7 +1237,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
+                    {/* ★ iPhone Duo 專屬：右側改為整欄可滾動，避免明細區被上下夾死 */}
+                    <div className="flex-1 flex flex-col relative bg-white overflow-hidden [.is-iphone-duo_&]:overflow-y-auto">
                         {!selectedPartner ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10 hidden md:flex">
                                 <Briefcase size={48} className="mb-4 opacity-30 text-amber-500"/>
@@ -1253,14 +1246,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </div>
                         ) : (
                             <>
-                                <div className="p-4 md:p-6 bg-slate-900 text-white flex flex-col lg:flex-row justify-between items-start lg:items-center flex-none shadow-md z-10 gap-4">
+                                <div className="p-4 md:p-6 [.is-iphone-duo_&]:p-3 bg-slate-900 text-white flex flex-col lg:flex-row justify-between items-start lg:items-center flex-none shadow-md z-10 gap-4 [.is-iphone-duo_&]:gap-2">
                                     <div>
-                                        <h3 className="text-2xl font-black tracking-wide mb-1">{selectedPartner}</h3>
+                                        <h3 className="text-2xl [.is-iphone-duo_&]:text-lg font-black tracking-wide mb-1">{selectedPartner}</h3>
                                         <p className="text-xs text-slate-400">行家往來對帳單</p>
                                     </div>
                                     
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
-                                        <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 p-1.5 rounded-lg w-full sm:w-auto">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 [.is-iphone-duo_&]:gap-2 w-full lg:w-auto">
+                                        <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 p-1.5 [.is-iphone-duo_&]:p-1 rounded-lg w-full sm:w-auto">
                                             <label className="flex items-center text-[10px] font-bold text-slate-300 cursor-pointer ml-1 whitespace-nowrap">
                                                 <input type="checkbox" checked={isPartnerDateFilter} onChange={(e) => setIsPartnerDateFilter(e.target.checked)} className="mr-1.5 accent-blue-500"/>區間
                                             </label>
@@ -1276,13 +1269,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </button>
                                     </div>
 
-                                    <div className="text-right flex flex-col md:items-end w-full lg:w-auto border-t lg:border-t-0 border-slate-700 pt-3 lg:pt-0">
+                                    <div className="text-right flex flex-col md:items-end w-full lg:w-auto border-t lg:border-t-0 border-slate-700 pt-3 lg:pt-0 [.is-iphone-duo_&]:pt-2">
                                         <div className="flex justify-between lg:justify-end items-center w-full gap-4">
                                             <div className="text-left lg:text-right">
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">目前總結餘 (Balance)</p>
-                                                <span className={`text-2xl lg:text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
+                                                <span className={`text-2xl lg:text-3xl [.is-iphone-duo_&]:text-xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
                                             </div>
-                                            <div className="flex flex-col gap-2">
+                                            <div className="flex flex-col gap-2 [.is-iphone-duo_&]:gap-1.5">
                                                 <button onClick={handleSyncFromVehicles} className="bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 px-3 py-1.5 rounded text-[10px] font-bold transition-colors border border-indigo-400/30 flex items-center justify-center whitespace-nowrap">
                                                     <RefreshCw size={12} className="mr-1"/> 掃描車輛未付
                                                 </button>
@@ -1291,12 +1284,12 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-slate-50">
-                                    <div className="space-y-3">
+                                <div className="flex-1 [.is-iphone-duo_&]:min-h-[260px] overflow-y-auto p-3 md:p-6 [.is-iphone-duo_&]:p-3 bg-slate-50">
+                                    <div className="space-y-3 [.is-iphone-duo_&]:space-y-2">
                                         {displayPartnerHistory.map(l => {
                                             const isSystemAuto = !!l.sourceModule;
                                             return (
-                                                <div key={l.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
+                                                <div key={l.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 [.is-iphone-duo_&]:p-3 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black flex-shrink-0 ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{l.type === 'receivable' ? '入' : '出'}</div>
                                                         <div>
@@ -1318,7 +1311,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                     </div>
                                                     <div className="text-right flex items-center justify-between md:justify-end gap-4 w-full md:w-auto mt-3 md:mt-0 pt-3 md:pt-0 border-t md:border-0 border-slate-100">
                                                         <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>{l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
-                                                        {/* 解鎖系統連動紀錄的刪除按鈕 */}
                                                         <button 
                                                             onClick={() => handleDeleteLedgerRecord(l.id)} 
                                                             className={`opacity-100 md:opacity-0 group-hover:opacity-100 p-2 rounded-lg transition-all ${isSystemAuto ? 'text-red-300 hover:text-red-600 hover:bg-red-50 bg-slate-50 md:bg-transparent' : 'text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 md:bg-transparent'}`} 
@@ -1336,31 +1328,31 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
                                 
-                                <form onSubmit={handleAddLedgerRecord} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
-                                    <div className="flex flex-col gap-3">
-                                        <div className="flex flex-col sm:flex-row gap-3 items-center">
-                                            <input type="date" value={newLedger.date} onChange={e => setNewLedger({...newLedger, date: e.target.value})} className="w-full sm:w-36 p-2.5 border rounded-lg text-sm font-bold text-slate-700 outline-none" required />
-                                            <select value={newLedger.type} onChange={e => setNewLedger({...newLedger, type: e.target.value})} className="w-full sm:w-48 p-2.5 border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
+                                <form onSubmit={handleAddLedgerRecord} className="p-4 [.is-iphone-duo_&]:p-2.5 [.is-iphone-duo_&]:pb-20 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
+                                    <div className="flex flex-col gap-3 [.is-iphone-duo_&]:gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-3 [.is-iphone-duo_&]:gap-2 items-center">
+                                            <input type="date" value={newLedger.date} onChange={e => setNewLedger({...newLedger, date: e.target.value})} className="w-full sm:w-36 p-2.5 [.is-iphone-duo_&]:p-1.5 [.is-iphone-duo_&]:text-xs border rounded-lg text-sm font-bold text-slate-700 outline-none" required />
+                                            <select value={newLedger.type} onChange={e => setNewLedger({...newLedger, type: e.target.value})} className="w-full sm:w-48 p-2.5 [.is-iphone-duo_&]:p-1.5 [.is-iphone-duo_&]:text-xs border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
                                                 <option value="receivable" className="text-green-700">🟢 我方應收 (借出/收佣)</option>
                                                 <option value="payable" className="text-red-700">🔴 我方應付 (找數/墊支)</option>
                                             </select>
                                             <div className="flex items-center bg-white border rounded-lg overflow-hidden w-full focus-within:ring-2 ring-amber-200">
                                                 <span className="pl-3 text-slate-400 font-bold">$</span>
-                                                <input type="text" placeholder="金額" value={newLedger.amount} onChange={e => setNewLedger({...newLedger, amount: formatNumberInput(e.target.value)})} className="w-full p-2.5 outline-none text-right font-mono font-black text-slate-800" required />
+                                                <input type="text" placeholder="金額" value={newLedger.amount} onChange={e => setNewLedger({...newLedger, amount: formatNumberInput(e.target.value)})} className="w-full p-2.5 [.is-iphone-duo_&]:p-1.5 [.is-iphone-duo_&]:text-xs outline-none text-right font-mono font-black text-slate-800" required />
                                             </div>
                                         </div>
-                                        <div className="flex flex-col sm:flex-row gap-3 items-center">
-                                            <select value={newLedger.method} onChange={e => setNewLedger({...newLedger, method: e.target.value})} className="w-full sm:w-36 p-2.5 border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
+                                        <div className="flex flex-col sm:flex-row gap-3 [.is-iphone-duo_&]:gap-2 items-center">
+                                            <select value={newLedger.method} onChange={e => setNewLedger({...newLedger, method: e.target.value})} className="w-full sm:w-36 p-2.5 [.is-iphone-duo_&]:p-1.5 [.is-iphone-duo_&]:text-xs border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
                                                 <option value="Transfer">🏦 銀行轉帳</option>
                                                 <option value="Cheque">🧾 支票</option>
                                                 <option value="Cash">💵 現金</option>
                                                 <option value="Offset">🔄 對數抵銷</option>
                                             </select>
                                             {newLedger.method === 'Cheque' && (
-                                                <input type="text" placeholder="支票號碼..." value={newLedger.refNo} onChange={e => setNewLedger({...newLedger, refNo: e.target.value})} className="w-full sm:w-32 p-2.5 border border-purple-200 rounded-lg text-sm font-mono outline-none focus:ring-2 ring-purple-200 bg-purple-50" />
+                                                <input type="text" placeholder="支票號碼..." value={newLedger.refNo} onChange={e => setNewLedger({...newLedger, refNo: e.target.value})} className="w-full sm:w-32 p-2.5 [.is-iphone-duo_&]:p-1.5 [.is-iphone-duo_&]:text-xs border border-purple-200 rounded-lg text-sm font-mono outline-none focus:ring-2 ring-purple-200 bg-purple-50" />
                                             )}
-                                            <input type="text" placeholder="說明備註 (例如：結清某某車款)..." value={newLedger.note} onChange={e => setNewLedger({...newLedger, note: e.target.value})} className="flex-1 w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 ring-amber-200" required />
-                                            <button type="submit" className="w-full sm:w-32 bg-amber-500 text-white font-bold px-6 py-2.5 rounded-lg shadow-md hover:bg-amber-600 active:scale-95 transition-all">記帳入庫</button>
+                                            <input type="text" placeholder="說明備註 (例如：結清某某車款)..." value={newLedger.note} onChange={e => setNewLedger({...newLedger, note: e.target.value})} className="flex-1 w-full p-2.5 [.is-iphone-duo_&]:p-1.5 [.is-iphone-duo_&]:text-xs border rounded-lg text-sm outline-none focus:ring-2 ring-amber-200" required />
+                                            <button type="submit" className="w-full sm:w-32 bg-amber-500 text-white font-bold px-6 py-2.5 [.is-iphone-duo_&]:px-3 [.is-iphone-duo_&]:py-1.5 [.is-iphone-duo_&]:text-xs rounded-lg shadow-md hover:bg-amber-600 active:scale-95 transition-all">記帳入庫</button>
                                         </div>
                                     </div>
                                 </form>
@@ -1396,10 +1388,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         (v.financingRecords || []).forEach((f: any) => {
                             if (f.lenderName === selectedLender) {
                                 if (f.status === 'Active') {
-                                    activePrincipalTotal += Number(f.principal || 0);
+                                    activePrincipalTotal = roundMoney(activePrincipalTotal + Number(f.principal || 0));
                                 }
                                 if (f.status === 'Settled' && f.endDate?.startsWith(currentMonthPrefix)) {
-                                    currentMonthInterest += Number(f.actualInterest || 0);
+                                    currentMonthInterest = roundMoney(currentMonthInterest + Number(f.actualInterest || 0));
                                 }
                                 lenderHistory.push({
                                     vehicleId: v.id,
@@ -1422,13 +1414,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                 return (
                     <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
-                        <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
-                            <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
-                                <h3 className="font-bold text-slate-700 flex items-center mb-3"><DollarSign size={18} className="mr-2 text-pink-600"/> 資金池 / 金主名單</h3>
+                        <div className="w-full md:w-80 [.is-iphone-duo_&]:w-56 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                            <div className="p-3 md:p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-200 bg-white">
+                                <h3 className="font-bold text-slate-700 flex items-center mb-3 [.is-iphone-duo_&]:mb-1 [.is-iphone-duo_&]:text-sm"><DollarSign size={18} className="mr-2 text-pink-600"/> 資金池 / 金主名單</h3>
                             </div>
-                            <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
+                            <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1 [.is-iphone-duo_&]:pb-16">
                                 {lendersList.map((lender: string, idx: number) => (
-                                    <div key={idx} onClick={() => setSelectedLender(lender)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all font-bold text-sm flex-shrink-0 min-w-[140px] md:min-w-0 text-center md:text-left ${selectedLender === lender ? 'bg-pink-100 border border-pink-300 shadow-sm text-pink-900' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200 text-slate-700'}`}>
+                                    <div key={idx} onClick={() => setSelectedLender(lender)} className={`p-2 md:p-3 [.is-iphone-duo_&]:p-2 rounded-xl cursor-pointer transition-all font-bold text-sm flex-shrink-0 min-w-[140px] md:min-w-0 text-center md:text-left ${selectedLender === lender ? 'bg-pink-100 border border-pink-300 shadow-sm text-pink-900' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200 text-slate-700'}`}>
                                         {lender}
                                     </div>
                                 ))}
@@ -1436,7 +1428,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </div>
                         </div>
 
-                        <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
+                        <div className="flex-1 flex flex-col relative bg-white overflow-hidden [.is-iphone-duo_&]:overflow-y-auto">
                             {!selectedLender ? (
                                 <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10 hidden md:flex">
                                     <DollarSign size={48} className="mb-4 opacity-30 text-pink-500"/>
@@ -1445,27 +1437,27 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                             ) : (
                                 <>
-                                    <div className="p-4 md:p-6 bg-slate-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center flex-none shadow-md z-10 gap-4">
+                                    <div className="p-4 md:p-6 [.is-iphone-duo_&]:p-3 bg-slate-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center flex-none shadow-md z-10 gap-4 [.is-iphone-duo_&]:gap-2">
                                         <div>
-                                            <h3 className="text-2xl font-black tracking-wide mb-1">{selectedLender}</h3>
+                                            <h3 className="text-2xl [.is-iphone-duo_&]:text-lg font-black tracking-wide mb-1">{selectedLender}</h3>
                                             <p className="text-xs text-slate-400">資金池佔用與利息月結單</p>
                                         </div>
-                                        <div className="flex flex-row md:flex-col lg:flex-row gap-6 text-left md:text-right w-full md:w-auto justify-between border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
+                                        <div className="flex flex-row md:flex-col lg:flex-row gap-6 [.is-iphone-duo_&]:gap-3 text-left md:text-right w-full md:w-auto justify-between border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
                                             <div>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">現時動用本金 (Active Principal)</p>
-                                                <span className="text-2xl font-black font-mono text-blue-400">{formatCurrency(activePrincipalTotal)}</span>
+                                                <span className="text-2xl [.is-iphone-duo_&]:text-lg font-black font-mono text-blue-400">{formatCurrency(activePrincipalTotal)}</span>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">本月結算利息 (This Month Interest)</p>
-                                                <span className="text-2xl font-black font-mono text-pink-400">{formatCurrency(currentMonthInterest)}</span>
+                                                <span className="text-2xl [.is-iphone-duo_&]:text-lg font-black font-mono text-pink-400">{formatCurrency(currentMonthInterest)}</span>
                                             </div>
                                         </div>
                                     </div>
                                     
-                                    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-slate-50">
-                                        <div className="space-y-4">
+                                    <div className="flex-1 [.is-iphone-duo_&]:min-h-[260px] overflow-y-auto p-3 md:p-6 [.is-iphone-duo_&]:p-3 [.is-iphone-duo_&]:pb-20 bg-slate-50">
+                                        <div className="space-y-4 [.is-iphone-duo_&]:space-y-2.5">
                                             {lenderHistory.map((f, idx) => (
-                                                <div key={idx} className={`flex flex-col md:flex-row justify-between p-4 bg-white rounded-xl border shadow-sm transition-colors ${f.status === 'Active' ? 'border-blue-200 hover:border-blue-300' : 'border-slate-200 hover:border-pink-300'}`}>
+                                                <div key={idx} className={`flex flex-col md:flex-row justify-between p-4 [.is-iphone-duo_&]:p-3 bg-white rounded-xl border shadow-sm transition-colors ${f.status === 'Active' ? 'border-blue-200 hover:border-blue-300' : 'border-slate-200 hover:border-pink-300'}`}>
                                                     <div className="flex items-start gap-4">
                                                         <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-black flex-shrink-0 ${f.status === 'Active' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
                                                             {f.status === 'Active' ? '計息' : '結算'}
@@ -1506,28 +1498,28 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             })()}
 
             {/* ========================================== */}
-            {/* Tab 6: 會計帳目 (Accounting) */}
+            {/* Tab 6: 會計帳目 (Accounting) — iPhone Duo 允許整區滾動 + 表格保底高度 */}
             {/* ========================================== */}
             {financeTab === 'accounting' && isFullAccess && (
-                <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
+                <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden [.is-iphone-duo_&]:overflow-y-auto [.is-iphone-duo_&]:pb-16 animate-fade-in">
                     
                     {/* 控制列 (Filters) */}
-                    <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 flex-none">
+                    <div className="p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 [.is-iphone-duo_&]:gap-2 flex-none">
                         <div>
-                            <h3 className="font-bold text-slate-800 text-lg flex items-center"><Receipt size={20} className="mr-2 text-emerald-600"/> 會計流水帳 (Cashbook)</h3>
-                            <p className="text-xs text-slate-500 mt-1">系統自動聚合所有已收/已付的現金流，供對帳使用。</p>
+                            <h3 className="font-bold text-slate-800 text-lg [.is-iphone-duo_&]:text-base flex items-center"><Receipt size={20} className="mr-2 text-emerald-600"/> 會計流水帳 (Cashbook)</h3>
+                            <p className="text-xs text-slate-500 mt-1 [.is-iphone-duo_&]:hidden">系統自動聚合所有已收/已付的現金流，供對帳使用。</p>
                         </div>
                         
-                        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                        <div className="flex flex-wrap items-center gap-3 [.is-iphone-duo_&]:gap-2 w-full lg:w-auto">
                             <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden w-full sm:w-auto">
-                                <select value={accFilterType} onChange={e => setAccFilterType(e.target.value as any)} className="bg-transparent text-xs font-bold text-slate-700 py-2 px-3 outline-none cursor-pointer border-r border-slate-200">
+                                <select value={accFilterType} onChange={e => setAccFilterType(e.target.value as any)} className="bg-transparent text-xs font-bold text-slate-700 py-2 px-3 [.is-iphone-duo_&]:py-1.5 outline-none cursor-pointer border-r border-slate-200">
                                     <option value="All">全部 (All)</option>
                                     <option value="IN">只看收入 (IN)</option>
                                     <option value="OUT">只看支出 (OUT)</option>
                                 </select>
                                 <div className="relative flex-1">
                                     <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-400"/>
-                                    <input value={accSearchTerm} onChange={e => setAccSearchTerm(e.target.value)} placeholder="搜尋摘要/車牌..." className="bg-transparent text-xs py-2 pl-7 pr-3 outline-none w-full md:w-48"/>
+                                    <input value={accSearchTerm} onChange={e => setAccSearchTerm(e.target.value)} placeholder="搜尋摘要/車牌..." className="bg-transparent text-xs py-2 [.is-iphone-duo_&]:py-1.5 pl-7 pr-3 outline-none w-full md:w-48"/>
                                 </div>
                             </div>
 
@@ -1542,14 +1534,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                             </div>
 
-                            <button onClick={exportAccountingCSV} className="w-full lg:w-auto justify-center bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-md hover:bg-emerald-700 active:scale-95 transition-all flex items-center ml-auto lg:ml-0">
+                            <button onClick={exportAccountingCSV} className="w-full lg:w-auto justify-center bg-emerald-600 text-white px-4 py-2 [.is-iphone-duo_&]:py-1.5 rounded-lg font-bold text-xs shadow-md hover:bg-emerald-700 active:scale-95 transition-all flex items-center ml-auto lg:ml-0">
                                 <DownloadCloud size={14} className="mr-1.5"/> 匯出 CSV
                             </button>
                         </div>
                     </div>
 
                     {/* 流水帳表格 */}
-                    <div className="flex-1 w-full overflow-x-auto bg-white relative scrollbar-thin scrollbar-thumb-slate-300 pb-2">
+                    <div className="flex-1 [.is-iphone-duo_&]:min-h-[300px] w-full overflow-x-auto bg-white relative scrollbar-thin scrollbar-thumb-slate-300 pb-2">
                         <table className="w-full min-w-[1200px] text-left text-sm border-collapse whitespace-nowrap">
                             <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm">
                                 <tr>
@@ -1618,39 +1610,39 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 7: 資金預算沙盤 (Capital Sandbox) */}
             {/* ========================================== */}
             {financeTab === 'capital' && isFullAccess && (() => {
-                const principal = Number(capPrincipal.replace(/,/g, '')) || 0;
-                const upfrontFee = principal * (capFee / 100);
-                const upfrontInterest = principal * (capInterest / 100);
-                const usableCash = principal - upfrontFee - upfrontInterest;
+                const principal = roundMoney(Number(capPrincipal.replace(/,/g, '')) || 0);
+                const upfrontFee = roundMoney(principal * (capFee / 100));
+                const upfrontInterest = roundMoney(principal * (capInterest / 100));
+                const usableCash = roundMoney(principal - upfrontFee - upfrontInterest);
                 
-                const totalInterest = principal * (capInterest / 100) * capYears;
-                const totalCost = upfrontFee + totalInterest;
+                const totalInterest = roundMoney(principal * (capInterest / 100) * capYears);
+                const totalCost = roundMoney(upfrontFee + totalInterest);
                 
                 const breakEvenYield = usableCash > 0 ? (totalCost / usableCash / capYears) * 100 : 0;
 
-                const valUsedCar = usableCash * (allocUsedCar / 100);
-                const valLimited = usableCash * (allocLimited / 100);
-                const valRental = usableCash * (allocRental / 100);
+                const valUsedCar = roundMoney(usableCash * (allocUsedCar / 100));
+                const valLimited = roundMoney(usableCash * (allocLimited / 100));
+                const valRental = roundMoney(usableCash * (allocRental / 100));
 
-                const retUsedCar = valUsedCar * (yieldUsedCar / 100);
-                const retLimited = valLimited * (yieldLimited / 100);
-                const retRental = valRental * (yieldRental / 100);
+                const retUsedCar = roundMoney(valUsedCar * (yieldUsedCar / 100));
+                const retLimited = roundMoney(valLimited * (yieldLimited / 100));
+                const retRental = roundMoney(valRental * (yieldRental / 100));
                 
-                const totalAnnualReturn = retUsedCar + retLimited + retRental;
+                const totalAnnualReturn = roundMoney(retUsedCar + retLimited + retRental);
                 const blendedYield = usableCash > 0 ? (totalAnnualReturn / usableCash) * 100 : 0;
-                const netAnnualProfit = totalAnnualReturn - (principal * (capInterest / 100)) - (upfrontFee / capYears);
+                const netAnnualProfit = roundMoney(totalAnnualReturn - (principal * (capInterest / 100)) - (upfrontFee / capYears));
 
                 return (
-                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl shadow-sm border border-slate-200 overflow-y-auto animate-fade-in p-4 md:p-6 space-y-6">
+                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl shadow-sm border border-slate-200 overflow-y-auto animate-fade-in p-4 md:p-6 [.is-iphone-duo_&]:p-3 [.is-iphone-duo_&]:pb-20 space-y-6 [.is-iphone-duo_&]:space-y-4">
                         
-                        <div className="bg-purple-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
+                        <div className="bg-purple-900 text-white p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-lg relative overflow-hidden">
                             <div className="absolute -right-10 -top-10 w-48 h-48 bg-purple-600/30 rounded-full blur-3xl"></div>
-                            <h3 className="text-xl font-black mb-2 flex items-center"><DollarSign className="mr-2 text-yellow-400"/> 資金成本與槓桿模擬器 (Capital Sandbox)</h3>
-                            <p className="text-sm text-purple-200 max-w-2xl">計算包含「先扣利息與手續費」的真實資金成本，並將可用現金流分配至三大業務板塊，模擬您的年度預期回報與風險。</p>
+                            <h3 className="text-xl [.is-iphone-duo_&]:text-base font-black mb-2 flex items-center"><DollarSign className="mr-2 text-yellow-400"/> 資金成本與槓桿模擬器 (Capital Sandbox)</h3>
+                            <p className="text-sm [.is-iphone-duo_&]:text-xs text-purple-200 max-w-2xl">計算包含「先扣利息與手續費」的真實資金成本，並將可用現金流分配至三大業務板塊，模擬您的年度預期回報與風險。</p>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 [.is-iphone-duo_&]:gap-4">
+                            <div className="bg-white p-5 [.is-iphone-duo_&]:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                                 <h4 className="font-bold text-slate-800 text-lg border-b pb-2">1. 外部資金結構 (Capital Structure)</h4>
                                 
                                 <div className="space-y-4">
@@ -1692,7 +1684,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                            <div className="bg-white p-5 [.is-iphone-duo_&]:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                                 <div className="flex justify-between items-center border-b pb-2">
                                     <h4 className="font-bold text-slate-800 text-lg">2. 資金池分配矩陣 (Allocation)</h4>
                                     <span className={`text-xs font-bold px-2 py-1 rounded ${allocUsedCar + allocLimited + allocRental === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>總分配: {allocUsedCar + allocLimited + allocRental}%</span>
@@ -1723,7 +1715,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                             </div>
                             
-                            <div className="lg:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center text-white">
+                            <div className="lg:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center text-white">
                                 <div className="mb-4 md:mb-0 w-full md:w-auto">
                                     <div className="text-slate-400 font-bold text-sm uppercase tracking-widest mb-1">Portfolio Projection (投資組合預期)</div>
                                     <div className="text-3xl font-black text-white">{blendedYield.toFixed(2)}% <span className="text-sm text-slate-400 font-normal">混合年回報率</span></div>
@@ -1753,12 +1745,12 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
                     
                     {/* 左側：員工列表 */}
-                    <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
-                        <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
-                            <h3 className="font-bold text-slate-700 flex items-center mb-1"><User size={18} className="mr-2 text-blue-600"/> 員工報銷與記帳</h3>
-                            <p className="text-xs text-slate-400">自動分發 (Fan-out) 至對應帳戶</p>
+                    <div className="w-full md:w-80 [.is-iphone-duo_&]:w-56 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                        <div className="p-3 md:p-4 [.is-iphone-duo_&]:p-2.5 border-b border-slate-200 bg-white">
+                            <h3 className="font-bold text-slate-700 flex items-center mb-1 [.is-iphone-duo_&]:text-sm"><User size={18} className="mr-2 text-blue-600"/> 員工報銷與記帳</h3>
+                            <p className="text-xs text-slate-400 [.is-iphone-duo_&]:hidden">自動分發 (Fan-out) 至對應帳戶</p>
                         </div>
-                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
+                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1 [.is-iphone-duo_&]:pb-16">
                             {(() => {
                                 const staffList = isFullAccess 
                                     ? Array.from(new Set([staffId, ...staffLedgers.map(l => l.staffId)])).filter(Boolean)
@@ -1766,10 +1758,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 
                                 return staffList.map((sId: any) => {
                                     const sLedgers = staffLedgers.filter(l => l.staffId === sId);
-                                    const sBalance = sLedgers.reduce((sum, l) => sum + (l.type === 'payable' ? Number(l.amount) : -Number(l.amount)), 0);
+                                    const sBalance = roundMoney(sLedgers.reduce((sum, l) => sum + (l.type === 'payable' ? Number(l.amount) : -Number(l.amount)), 0));
                                     
                                     return (
-                                        <div key={sId} onClick={() => setSelectedStaff(sId)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedStaff === sId ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
+                                        <div key={sId} onClick={() => setSelectedStaff(sId)} className={`p-2 md:p-3 [.is-iphone-duo_&]:p-2 rounded-xl cursor-pointer transition-all flex justify-between items-center flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedStaff === sId ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
                                             <span className={`font-bold text-sm truncate ${selectedStaff === sId ? 'text-blue-900' : 'text-slate-700'}`}>{sId === staffId ? '我 (My Account)' : sId}</span>
                                             {sBalance !== 0 && <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${sBalance > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>{sBalance > 0 ? '公司欠 ' : ''}${Math.abs(sBalance).toLocaleString()}</span>}
                                         </div>
@@ -1780,14 +1772,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     </div>
 
                     {/* 右側：主工作區 */}
-                    <div className="flex-1 flex flex-col relative bg-slate-50 overflow-y-auto p-4 md:p-6 space-y-6">
+                    <div className="flex-1 flex flex-col relative bg-slate-50 overflow-y-auto p-4 md:p-6 [.is-iphone-duo_&]:p-3 [.is-iphone-duo_&]:pb-20 space-y-6 [.is-iphone-duo_&]:space-y-4">
                         
-                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center border-b pb-3">
+                        <div className="bg-white p-4 md:p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-sm border border-slate-200">
+                            <h2 className="text-lg [.is-iphone-duo_&]:text-base font-black text-slate-800 mb-4 [.is-iphone-duo_&]:mb-3 flex items-center border-b pb-3 [.is-iphone-duo_&]:pb-2">
                                 <CreditCard className="mr-2 text-indigo-600" /> 員工記帳與報銷中心 (Expense Entry)
                             </h2>
 
-                            <form onSubmit={handleStaffExpenseSubmit} className="space-y-5">
+                            <form onSubmit={handleStaffExpenseSubmit} className="space-y-5 [.is-iphone-duo_&]:space-y-3">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">1. 錢是誰出的？ (資金來源)</label>
                                     <div className="flex flex-col sm:flex-row gap-2 bg-slate-100 p-1 rounded-lg">
@@ -1805,7 +1797,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     <select 
                                         value={staffExpForm.targetType} 
                                         onChange={e => setStaffExpForm({...staffExpForm, targetType: e.target.value})}
-                                        className="w-full p-3 border border-slate-300 rounded-lg outline-none focus:ring-2 ring-indigo-200 font-bold text-slate-700 bg-slate-50"
+                                        className="w-full p-3 [.is-iphone-duo_&]:p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 ring-indigo-200 font-bold text-slate-700 bg-slate-50"
                                     >
                                         <option value="company_general">🏢 一般公司雜費 (如水電、交際、文具)</option>
                                         <option value="vehicle_cost">🚗 特定車輛成本 (維修/中港代辦費)</option>
@@ -1813,7 +1805,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </select>
                                 </div>
 
-                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-4">
+                                <div className="bg-indigo-50/50 p-4 [.is-iphone-duo_&]:p-3 rounded-xl border border-indigo-100 space-y-4">
                                     {staffExpForm.targetType === 'company_general' && (
                                         <div>
                                             <label className="block text-xs font-bold text-indigo-700 mb-1">費用類別</label>
@@ -1844,27 +1836,27 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 [.is-iphone-duo_&]:gap-2.5">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-1">日期</label>
-                                        <input type="date" value={staffExpForm.date} onChange={e => setStaffExpForm({...staffExpForm, date: e.target.value})} className="w-full p-3 border rounded-lg outline-none font-bold font-mono bg-slate-50" required />
+                                        <input type="date" value={staffExpForm.date} onChange={e => setStaffExpForm({...staffExpForm, date: e.target.value})} className="w-full p-3 [.is-iphone-duo_&]:p-2 border rounded-lg outline-none font-bold font-mono bg-slate-50" required />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-1">金額 (HKD)</label>
                                         <div className="flex items-center border rounded-lg bg-white focus-within:ring-2 ring-indigo-200">
                                             <span className="pl-3 text-slate-400 font-bold">$</span>
-                                            <input type="text" value={staffExpForm.amount} onChange={e => setStaffExpForm({...staffExpForm, amount: formatNumberInput(e.target.value)})} placeholder="0.00" className="w-full p-3 outline-none font-mono font-black text-right text-lg text-indigo-600" required />
+                                            <input type="text" value={staffExpForm.amount} onChange={e => setStaffExpForm({...staffExpForm, amount: formatNumberInput(e.target.value)})} placeholder="0.00" className="w-full p-3 [.is-iphone-duo_&]:p-2 outline-none font-mono font-black text-right text-lg text-indigo-600" required />
                                         </div>
                                     </div>
                                 </div>
 
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">支出備註 / 說明</label>
-                                    <input type="text" value={staffExpForm.description} onChange={e => setStaffExpForm({...staffExpForm, description: e.target.value})} placeholder="例如：幫忙付威仔的中檢費..." className="w-full p-3 border rounded-lg outline-none focus:ring-2 ring-indigo-200 bg-slate-50" required />
+                                    <input type="text" value={staffExpForm.description} onChange={e => setStaffExpForm({...staffExpForm, description: e.target.value})} placeholder="例如：幫忙付威仔的中檢費..." className="w-full p-3 [.is-iphone-duo_&]:p-2 border rounded-lg outline-none focus:ring-2 ring-indigo-200 bg-slate-50" required />
                                 </div>
 
                                 <div className="pt-2">
-                                    <button type="submit" disabled={isSubmittingStaffExp} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-all flex justify-center items-center shadow-lg active:scale-95 text-sm md:text-base">
+                                    <button type="submit" disabled={isSubmittingStaffExp} className="w-full bg-slate-900 text-white font-black py-4 [.is-iphone-duo_&]:py-2.5 rounded-xl hover:bg-slate-800 transition-all flex justify-center items-center shadow-lg active:scale-95 text-sm md:text-base">
                                         {isSubmittingStaffExp ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
                                         {staffExpForm.fundSource === 'personal' ? '紀錄代墊款 並 拋轉至各帳戶' : '紀錄公司支出'}
                                     </button>
@@ -1877,7 +1869,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </form>
                         </div>
 
-                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="bg-white p-4 md:p-6 [.is-iphone-duo_&]:p-4 rounded-2xl shadow-sm border border-slate-200">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-4 border-b pb-3 gap-2">
                                 <div>
                                     <h3 className="text-lg font-black text-slate-800 tracking-wide">{selectedStaff} <span className="text-sm font-bold text-slate-400 ml-2">代墊款往來帳</span></h3>
@@ -1885,7 +1877,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 <div className="text-left sm:text-right">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">公司目前欠款 (Company Payable)</p>
                                     <div className="flex items-center sm:justify-end gap-3">
-                                        <span className={`text-3xl font-black font-mono ${myBalance > 0 ? 'text-green-500' : 'text-slate-300'}`}>
+                                        <span className={`text-3xl [.is-iphone-duo_&]:text-2xl font-black font-mono ${myBalance > 0 ? 'text-green-500' : 'text-slate-300'}`}>
                                             ${formatCurrency(myBalance)}
                                         </span>
                                         {myBalance > 0 && isFullAccess && (
@@ -1899,7 +1891,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                             <div className="space-y-3">
                                 {myLedgers.map(l => (
-                                    <div key={l.id} className="flex justify-between items-center p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-200 group transition-colors hover:border-blue-300 shadow-sm">
+                                    <div key={l.id} className="flex justify-between items-center p-3 md:p-4 [.is-iphone-duo_&]:p-3 bg-slate-50 rounded-xl border border-slate-200 group transition-colors hover:border-blue-300 shadow-sm">
                                         <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
                                             <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-black text-xs md:text-base flex-shrink-0 ${l.type === 'payable' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>{l.type === 'payable' ? '墊' : '還'}</div>
                                             <div className="min-w-0">
