@@ -53,16 +53,20 @@ export default function RootLayout({
                   document.documentElement.classList.add('is-windows');
                 }
                 function syncDeviceLayout() {
+                  var w = window.innerWidth;
+                  var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
                   var isIphone = /iPhone/i.test(navigator.userAgent);
                   var isUnfolded = window.screen.width > 500 && window.screen.height > 500;
                   var isDualScreen = window.matchMedia && window.matchMedia('(horizontal-viewport-segments: 2)').matches;
-                  if ((isIphone && isUnfolded) || isDualScreen) {
+                  
+                  // ★ 核心修復：只要是橫向矮螢幕 (寬>=640 且 高<=780)，直接啟用緊湊適配，不再受限於 UA 誤判
+                  var isShortLandscape = (w >= 640 && h <= 780);
+
+                  if ((isIphone && isUnfolded) || isDualScreen || isShortLandscape) {
                     document.documentElement.classList.add('is-iphone-duo');
                   } else {
                     document.documentElement.classList.remove('is-iphone-duo');
                   }
-                  // ★ 優先採用 visualViewport.height，精準對應 iOS 旋轉後的實際可視高度
-                  var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
                   document.documentElement.style.setProperty('--app-height', h + 'px');
                 }
                 syncDeviceLayout();
@@ -71,7 +75,6 @@ export default function RootLayout({
                   window.visualViewport.addEventListener('resize', syncDeviceLayout);
                 }
                 window.addEventListener('orientationchange', function() {
-                  // iOS 旋轉動畫約需 300~450ms，分段重算徹底消滅底部空白
                   setTimeout(syncDeviceLayout, 100);
                   setTimeout(syncDeviceLayout, 300);
                   setTimeout(syncDeviceLayout, 500);
