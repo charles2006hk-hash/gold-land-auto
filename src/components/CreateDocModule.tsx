@@ -7,7 +7,9 @@ import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serve
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 import { calculateAutoLoan } from '@/utils/LoanCalculator'; 
 
-const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
+// ★ 財務精度保護：消除 JavaScript 浮點數加減誤差
+const roundMoney = (val: number) => Math.round(((val || 0) + Number.EPSILON) * 100) / 100;
+const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(roundMoney(amount || 0));
 
 const SignatureModal = ({ onSave, onClose, customerName }: { onSave: (img: string) => void, onClose: () => void, customerName: string }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -146,7 +148,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         customerName: '', customerId: '', customerAddress: '', customerPhone: '',
         regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', 
         transmission: 'Automatic', engineSize: '', mileage: '', seat: '', previousOwners: '',
-        price: '', deposit: '', balance: '', 
+        price: '', vipDiscount: '', deposit: '', balance: '', 
         docDate: new Date().toISOString().split('T')[0], 
         deliveryDate: new Date().toISOString().split('T')[0], 
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
@@ -268,7 +270,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (externalRequest) {
             setDocId(externalRequest.id);
             setSelectedDocType(externalRequest.type);
-            const newFormData = { ...externalRequest.formData };
+            const newFormData = { vipDiscount: '', ...externalRequest.formData };
             if (!newFormData.docDate) newFormData.docDate = new Date().toISOString().split('T')[0];
             if (!newFormData.contractPhotos) newFormData.contractPhotos = [];
             
@@ -283,7 +285,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
     }, [externalRequest]);
 
-   useEffect(() => {
+    useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'));
         
@@ -344,7 +346,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     customerPhone: isAcq ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
                     customerId: isAcq ? (car.acquisition?.vendorID || '') : (car.customerID || ''),
                     customerAddress: isAcq ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
-                    price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0')
+                    price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'),
+                    vipDiscount: (!isAcq && car.vipDiscount) ? car.vipDiscount.toString() : ''
                 }));
             }
         }
@@ -355,7 +358,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const editDoc = (doc: any) => {
         setDocId(doc.id);
         setSelectedDocType(doc.type);
-        const newFormData = { ...doc.formData };
+        const newFormData = { vipDiscount: '', ...doc.formData };
         if (!newFormData.docDate) newFormData.docDate = doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
         if (!newFormData.contractPhotos) newFormData.contractPhotos = [];
         
@@ -401,6 +404,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         let combinedDocItems: any[] = [];
         let combinedDepositItems: any[] = [];
         let regMarks: string[] = [];
+        let totalVipDiscount = 0;
         
         docsToMerge.forEach((doc, docIndex) => {
             const vMark = doc.formData?.regMark || `車輛${docIndex+1}`;
@@ -408,6 +412,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             if (doc.formData?.price) {
                 combinedDocItems.push({ id: `merge_p_${doc.id}`, desc: `[${vMark}] 車價`, amount: Number(String(doc.formData.price).replace(/,/g, '')), isSelected: true });
+            }
+            if (doc.formData?.vipDiscount) {
+                totalVipDiscount = roundMoney(totalVipDiscount + (Number(String(doc.formData.vipDiscount).replace(/,/g, '')) || 0));
             }
             if (doc.docItems) {
                 doc.docItems.forEach((i: any) => combinedDocItems.push({ ...i, id: `merge_i_${doc.id}_${i.id}`, desc: `[${vMark}] ${i.desc}` }));
@@ -429,7 +436,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             linkedRegMarks: regMarks,     
             make: '合併單據 (Merged)',
             model: 'Multiple Vehicles',
-            price: '0', 
+            price: '0',
+            vipDiscount: totalVipDiscount > 0 ? String(totalVipDiscount) : '',
             remarks: `合併單據包含以下記錄：\n${docsToMerge.map(d => d.id).join(', ')}\n`
         }));
         
@@ -495,7 +503,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     const dbPhone = (data.phone || '').trim();
                     const dbId = (data.idNumber || '').trim();
 
-                    // 判斷條件：名字完全匹配(忽略大小寫) OR 電話相同 OR 證件號碼相同
                     const nameMatch = dbName === customerName.toLowerCase();
                     const phoneMatch = customerPhone && dbPhone === customerPhone;
                     const idMatch = customerId && dbId === customerId;
@@ -510,20 +517,16 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 if (matchedDoc && existingData) {
                     const updatedFields: any = { updatedAt: serverTimestamp() };
                     
-                    // 1. 補齊缺失的基本資料
                     if (!existingData.phone && customerPhone) updatedFields.phone = customerPhone;
                     if (!existingData.idNumber && customerId) updatedFields.idNumber = customerId;
                     if (!existingData.address && formData.customerAddress) updatedFields.address = formData.customerAddress;
                     
-                    // 2. 智能更新名稱：如果新名字更長 (例如 "Jason" 變為 "Jason 陳大文")，或是大小寫更標準，則覆蓋更新
                     if (customerName.length > (existingData.name || '').length) {
                         updatedFields.name = customerName; 
                     } else if (customerName.length === (existingData.name || '').length && existingData.name !== customerName) {
-                        // 處理純大小寫修正 (例如 HINTAT TRADING COMPANY -> HINTAT Trading Company)
                         updatedFields.name = customerName;
                     }
 
-                    // 3. 綁定新車牌，避免重複
                     if (formData.regMark) {
                         const currentPlates = existingData.relatedPlateNo ? existingData.relatedPlateNo.split(',').map((p:string) => p.trim()) : [];
                         if (!currentPlates.includes(formData.regMark)) {
@@ -532,7 +535,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         }
                     }
 
-                    // 4. 智能合併角色標籤 (如原本是「買家」，現在收車又變成「行家 / 前車主」)
                     const newRole = (selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') ? '行家 / 前車主' : '買家';
                     const currentRoles = existingData.roles || [];
                     if (!currentRoles.includes(newRole)) {
@@ -541,13 +543,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                     if (!existingData.category) updatedFields.category = 'Person';
 
-                    // 執行合併更新
                     if (Object.keys(updatedFields).length > 1) {
                         await updateDoc(doc(dbRef, matchedDoc.id), updatedFields);
                         console.log(`✅ 已智能合併更新現有客戶資料: ${existingData.name} -> ${updatedFields.name || existingData.name}`);
                     }
                 } else {
-                    // 若完全無匹配，建立新客戶
                     const isCompany = (selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') && customerId.includes('BR');
                     await addDoc(dbRef, {
                         name: customerName,
@@ -623,7 +623,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             seat: car.seating ? car.seating.toString() : '', 
             previousOwners: car.previousOwners !== undefined ? car.previousOwners.toString() : '',
             
-            price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'), 
+            price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'),
+            vipDiscount: (!isAcq && car.vipDiscount) ? car.vipDiscount.toString() : '',
             deposit: '', balance: '',
             
             customerName: isAcq ? (car.acquisition?.vendor || '') : (car.customerName || ''), 
@@ -647,16 +648,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             contractPhotos: [],
             isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
-            
         });
 
         const autoPayments: any[] = [];
         const paymentsToUse = isAcq ? (car.acquisition?.payments || []) : (car.payments || []);
         
         if (paymentsToUse.length > 0) {
-            paymentsToUse.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type || 'Payment'} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 }); });
+            paymentsToUse.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type || 'Payment'} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0, method: p.method || 'Cheque', remark: p.note || '' }); });
         } else { 
-            autoPayments.push({ id: 'dep_1', label: isAcq ? 'Deposit Paid (已付訂金)' : 'Deposit (訂金)', amount: 0 }); 
+            autoPayments.push({ id: 'dep_1', label: isAcq ? 'Deposit Paid (已付訂金)' : 'Deposit (訂金)', amount: 0, method: 'Cheque', remark: '' }); 
         }
         
         setDepositItems(autoPayments); setShowTerms(true);
@@ -679,7 +679,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     if (!groupedByDate[m.date]) groupedByDate[m.date] = { amount: 0, items: [] };
                     groupedByDate[m.date].amount += m.charge; groupedByDate[m.date].items.push(m.item);
                 });
-                Object.entries(groupedByDate).forEach(([date, data], i) => {
+                Object.entries(groupedByDate).forEach(([date, data]) => {
                     const summary = data.items.length > 2 ? `${data.items.slice(0,2).join('、')} 等${data.items.length}項` : data.items.join('、');
                     items.push({ id: `maint_batch_${date}`, desc: `[${date} 維修保養] ${summary}`, amount: data.amount, isSelected: true });
                 });
@@ -701,7 +701,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             companyAddress: COMPANY_INFO?.address_ch || '', 
             companyPhone: COMPANY_INFO?.phone || '', 
             companyEmail: COMPANY_INFO?.email || '', 
-            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
+            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', vipDiscount: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '',
             paymentMethod: 'Cheque', 
@@ -715,7 +715,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         });
         
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
-        setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
+        setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0, method: 'Cheque', remark: '' }]);
         setIsVehicleLocked(false); 
         setMobileStep('edit');
     };
@@ -748,8 +748,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             ...formData, 
             customerSignature: formData.customerSignature, 
             photos: showPhotos ? (formData.contractPhotos || []) : [], 
-            price: Number(String(formData.price).replace(/,/g, '')) || 0,
-            deposit: Math.round(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0) * 100) / 100,
+            price: roundMoney(Number(String(formData.price).replace(/,/g, '')) || 0),
+            vipDiscount: roundMoney(Number(String(formData.vipDiscount || 0).replace(/,/g, '')) || 0),
+            deposit: roundMoney(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0)),
             customerID: formData.customerId, 
             soldDate: formData.deliveryDate, 
             handoverTime: formData.handoverTime, 
@@ -794,11 +795,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     };
 
     const handleCalculateLoan = () => {
-        const price = Number(String(formData.price).replace(/,/g, '')) || 0;
-        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + i.amount, 0);
-        const dep = depositItems.reduce((sum, item) => sum + item.amount, 0);
+        const price = roundMoney(Number(String(formData.price).replace(/,/g, '')) || 0);
+        const vipDiscount = roundMoney(Number(String(formData.vipDiscount || 0).replace(/,/g, '')) || 0);
+        const extrasTotal = roundMoney(docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0));
+        const dep = roundMoney(depositItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0));
         
-        const loan = (price + extrasTotal) - dep;
+        const netCarTotal = roundMoney(price + extrasTotal - vipDiscount);
+        const loan = roundMoney(netCarTotal - dep);
         
         if (loan < 80000) { 
             alert("⚠️ 貸款額不可少於 HK$80,000"); 
@@ -810,7 +813,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const isUsedCar = Number(formData.previousOwners || 0) > 0;
         
         const calc = calculateAutoLoan(
-            price + extrasTotal, 
+            netCarTotal, 
             dep, 
             Number(formData.financeMonths), 
             Number(formData.financeRate),
@@ -838,16 +841,27 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const isBill = isSalesInvoice || isServiceInvoice || isReceipt;
         const isQuotation = selectedDocType === 'quotation';
         
-        const price = Number(String(formData.price).replace(/,/g, '')) || 0;
-        const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
-        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0);
+        const price = roundMoney(Number(String(formData.price).replace(/,/g, '')) || 0);
+        const vipDiscount = roundMoney(Number(String(formData.vipDiscount || 0).replace(/,/g, '')) || 0);
+        const deposit = roundMoney(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0));
+        const extrasTotal = roundMoney(docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0));
         
-        const ovFee = Number(String(formData.overseasTotalFee).replace(/,/g, '')) || 0;
-        const hkFee = Number(String(formData.localTotalFee).replace(/,/g, '')) || 0;
-        const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+        const ovFee = roundMoney(Number(String(formData.overseasTotalFee).replace(/,/g, '')) || 0);
+        const hkFee = roundMoney(Number(String(formData.localTotalFee).replace(/,/g, '')) || 0);
+        const orderFeesTotal = (formData.orderType === 'Overseas') ? roundMoney(ovFee + hkFee) : 0;
         
         const basePrice = (formData.orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
-        const balance = (basePrice + extrasTotal) - deposit;
+        const netTotalPrice = roundMoney(basePrice + extrasTotal - vipDiscount);
+        const balance = roundMoney(netTotalPrice - deposit);
+
+        const formatPaymentMeta = (item: any) => {
+            const methodMap: Record<string, string> = {
+                Cheque: '支票', Transfer: '過數', Cash: '現金', FPS: '轉數快', Card: '信用卡', 'Trade-in': '對數',
+            };
+            const methodText = item.method ? `[${methodMap[item.method] || item.method}]` : '';
+            const remarkText = item.remark || item.note ? ` - ${item.remark || item.note}` : '';
+            return `${methodText}${remarkText}`;
+        };
 
         const numberToEnglishWords = (n: number) => {
             if (n === 0 || !n) return 'ZERO ONLY';
@@ -891,7 +905,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
-        // ★ 同步 curCustomer
         const curCustomer = { 
             name: formData.customerName || '', 
             phone: formData.customerPhone || '', 
@@ -1006,8 +1019,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
                                                     <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                                 ))}
+                                                {vipDiscount > 0 && (
+                                                    <tr className="border-b text-amber-700 bg-amber-50/40">
+                                                        <td className="border p-1 font-bold pl-4">Less: VIP Discount (VIP 專屬折扣)</td>
+                                                        <td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(vipDiscount)}</td>
+                                                    </tr>
+                                                )}
                                                 {depositItems.map((item: any, idx: number) => (
-                                                    <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1 font-bold pl-4">Less: {item.label}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td></tr>
+                                                    <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
+                                                        <td className="border p-1 font-bold pl-4">
+                                                            Less: {item.label} <span className="text-[8px] font-normal ml-1 text-blue-500">{formatPaymentMeta(item)}</span>
+                                                        </td>
+                                                        <td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td>
+                                                    </tr>
                                                 ))}
                                                 <tr className="bg-red-50/50 font-black"><td className="border p-1 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(balance)}</td></tr>
                                                 {formData.isFinance && (
@@ -1022,7 +1046,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             ) : (
                                 <>
                                     {isReceipt ? (
-                                        // ★★★ 收據 Receipt 全新排版 (包含明細與車輛資訊) ★★★
+                                        // ★★★ 收據 Receipt 排版 (包含明細與車輛資訊) ★★★
                                         <div className="border-[3px] border-double border-slate-800 p-6 mb-4 relative bg-white">
                                             <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
                                                 <img src={COMPANY_INFO?.logo_url || ''} className="w-64 h-64 object-contain grayscale" />
@@ -1043,30 +1067,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[11px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">{numberToEnglishWords(deposit)}</div>
                                                 </div>
                                                 
-                                                {/* 升級版：多列明細清單 */}
                                                 <div className="flex items-start mt-2">
                                                     <div className="w-36 font-bold text-slate-700 leading-tight pt-1">in payment of<br/><span className="text-[10px] font-medium text-slate-500">係付</span></div>
                                                     <div className="flex-1 border-b border-slate-400 pb-2">
                                                         <table className="w-full text-xs">
                                                             <tbody>
-                                                                {depositItems.map((item: any, idx: number) => {
-                                                                    const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
-                                                                    const remarkText = item.remark ? ` - ${item.remark}` : '';
-                                                                    return (
-                                                                        <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
-                                                                            <td className="border p-1 font-bold pl-4">
-                                                                                Less: {item.label} <span className="text-[8px] font-normal ml-1 text-blue-500">{methodText}{remarkText}</span>
-                                                                            </td>
-                                                                            <td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
+                                                                {depositItems.map((item: any, idx: number) => (
+                                                                    <tr key={idx}>
+                                                                        <td className="py-1 font-bold text-slate-800">
+                                                                            • {item.label} <span className="text-[9px] text-slate-500 font-normal ml-1">{formatPaymentMeta(item)}</span>
+                                                                        </td>
+                                                                        <td className="py-1 text-right font-mono font-bold text-blue-700">{formatCurrency(item.amount)}</td>
+                                                                    </tr>
+                                                                ))}
                                                             </tbody>
                                                         </table>
                                                     </div>
                                                 </div>
 
-                                                {/* 收據的車輛明細區塊 */}
                                                 {(formData.regMark || formData.chassisNo) && (
                                                     <div className="flex items-start mt-2">
                                                         <div className="w-36 font-bold text-slate-700 leading-tight pt-1">Vehicle Ref.<br/><span className="text-[10px] font-medium text-slate-500">相關車輛</span></div>
@@ -1095,7 +1113,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </div>
                                     ) : (
                                         <>
-                                            {/* ★★★ 發票 Invoice 升級版客戶渲染區塊 ★★★ */}
+                                            {/* ★★★ 發票 Invoice 客戶渲染區塊 ★★★ */}
                                             <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-4 mt-2">
                                                 <div className="w-1/2 space-y-1.5">
                                                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bill To / 致：</h4>
@@ -1155,20 +1173,16 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
                                                             <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                                         ))}
-                                                        {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => {
-                                                            const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
-                                                            const remarkText = item.remark ? ` - ${item.remark}` : '';
-                                                            return (
-                                                                <tr key={`dep-${idx}`} className="border-b bg-blue-50/30">
-                                                                    <td className="p-1 font-bold text-blue-700 pl-4">
-                                                                        Less: {item.label} (已扣除) <span className="text-[8px] font-normal ml-1 text-blue-500">{methodText}{remarkText}</span>
-                                                                    </td>
-                                                                    <td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td>
-                                                                </tr>
-                                                            );
-                                                        })}
+                                                        {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
+                                                            <tr key={`dep-${idx}`} className="border-b bg-blue-50/30">
+                                                                <td className="p-1 font-bold text-blue-700 pl-4">
+                                                                    Less: {item.label} (已扣除) <span className="text-[8px] font-normal ml-1 text-blue-500">{formatPaymentMeta(item)}</span>
+                                                                </td>
+                                                                <td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td>
+                                                            </tr>
+                                                        ))}
                                                     </tbody>
-                                                    <tfoot><tr className="bg-slate-100 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">Total Due (應付總額)</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(extrasTotal - deposit)}</td></tr></tfoot>
+                                                    <tfoot><tr className="bg-slate-100 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">Total Due (應付總額)</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(roundMoney(extrasTotal - deposit))}</td></tr></tfoot>
                                                 </table>
                                             ) : (
                                                 <table className="w-full text-[9px] border-collapse mb-4">
@@ -1176,20 +1190,22 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <tbody>
                                                         <tr className="border-b"><td className="p-1 font-bold text-purple-800">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-1 text-right font-mono font-bold text-[11px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                                <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
-                                                            ))}
-                                                        {depositItems.map((item: any, idx: number) => {
-                                                            const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
-                                                            const remarkText = item.remark ? ` - ${item.remark}` : '';
-                                                            return (
-                                                                <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
-                                                                    <td className="border p-1 font-bold pl-4">
-                                                                        Less: {item.label} <span className="text-[8px] font-normal ml-1 text-blue-500">{methodText}{remarkText}</span>
-                                                                    </td>
-                                                                    <td className="border p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td>
-                                                                </tr>
-                                                            );
-                                                        })}
+                                                            <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
+                                                        ))}
+                                                        {vipDiscount > 0 && (
+                                                            <tr className="border-b text-amber-700 bg-amber-50/40">
+                                                                <td className="p-1 font-bold pl-4">Less: VIP Discount (VIP 專屬折扣)</td>
+                                                                <td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(vipDiscount)}</td>
+                                                            </tr>
+                                                        )}
+                                                        {depositItems.map((item: any, idx: number) => (
+                                                            <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
+                                                                <td className="border p-1 font-bold pl-4">
+                                                                    Less: {item.label} <span className="text-[8px] font-normal ml-1 text-blue-500">{formatPaymentMeta(item)}</span>
+                                                                </td>
+                                                                <td className="border p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td>
+                                                            </tr>
+                                                        ))}
                                                         {formData.isFinance && (
                                                             <tr className="bg-cyan-50/30 text-[9px]">
                                                                 <td colSpan={2} className="p-1 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
@@ -1223,8 +1239,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                                     ) : (
                                         <>
-                                            <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
-                                            本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                            <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(netTotalPrice)}</b> (Total{vipDiscount > 0 ? `, after VIP Discount of ${formatCurrency(vipDiscount)}` : ''}) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                            本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(netTotalPrice)}</b>{vipDiscount > 0 ? `（已扣除 VIP 折扣 ${formatCurrency(vipDiscount)}）` : ''} {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                             
                                             {selectedDocType === 'purchase_contract' && showPurchaseGuarantees && (
                                                 <div className="mt-1.5 pt-1.5 border-t border-slate-300">
@@ -1416,15 +1432,16 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     
                                     const docDateStr = doc.formData?.docDate || (doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : 'N/A');
 
-                                    const price = Number(String(doc.formData?.price || '').replace(/,/g, '')) || 0;
-                                    const ovFee = Number(String(doc.formData?.overseasTotalFee || '').replace(/,/g, '')) || 0;
-                                    const hkFee = Number(String(doc.formData?.localTotalFee || '').replace(/,/g, '')) || 0;
-                                    const orderFeesTotal = doc.formData?.orderType === 'Overseas' ? (ovFee + hkFee) : 0;
+                                    const price = roundMoney(Number(String(doc.formData?.price || '').replace(/,/g, '')) || 0);
+                                    const vipDiscount = roundMoney(Number(String(doc.formData?.vipDiscount || '').replace(/,/g, '')) || 0);
+                                    const ovFee = roundMoney(Number(String(doc.formData?.overseasTotalFee || '').replace(/,/g, '')) || 0);
+                                    const hkFee = roundMoney(Number(String(doc.formData?.localTotalFee || '').replace(/,/g, '')) || 0);
+                                    const orderFeesTotal = doc.formData?.orderType === 'Overseas' ? roundMoney(ovFee + hkFee) : 0;
                                     
                                     const basePrice = (doc.formData?.orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
-                                    const extrasTotal = (doc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0);
+                                    const extrasTotal = roundMoney((doc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0));
                                     
-                                    const totalAmt = basePrice + extrasTotal;
+                                    const totalAmt = roundMoney(basePrice + extrasTotal - vipDiscount);
                                     return (
                                         <tr key={doc.id} className={`hover:bg-blue-50/50 cursor-pointer text-xs transition-colors ${selectedForMerge.includes(doc.id) ? 'bg-indigo-50/30' : ''}`} onClick={() => editDoc(doc)}>
                                             <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1816,20 +1833,36 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 )}
                                 
                                 {selectedDocType !== 'service_invoice' && selectedDocType !== 'receipt' && (
-                                    <div className="bg-white p-2 rounded-lg border border-yellow-300 shadow-inner flex items-center mb-3">
-                                        <span className="text-xs font-bold text-yellow-800 w-24">
-                                            {selectedDocType === 'purchase_contract' ? '收車本金' : '車輛售價'}
-                                        </span>
-                                        <span className="text-yellow-600 font-mono font-bold mr-1">$</span>
-                                        <input 
-                                            name="price" 
-                                            type="number" 
-                                            value={formData.price} 
-                                            onChange={handleChange} 
-                                            className="flex-1 bg-transparent text-right font-mono font-black text-lg outline-none text-slate-800" 
-                                            placeholder="0"
-                                        />
-                                    </div>
+                                    <>
+                                        <div className="bg-white p-2 rounded-lg border border-yellow-300 shadow-inner flex items-center mb-2">
+                                            <span className="text-xs font-bold text-yellow-800 w-24">
+                                                {selectedDocType === 'purchase_contract' ? '收車本金' : '車輛售價'}
+                                            </span>
+                                            <span className="text-yellow-600 font-mono font-bold mr-1">$</span>
+                                            <input 
+                                                name="price" 
+                                                type="number" 
+                                                value={formData.price} 
+                                                onChange={handleChange} 
+                                                className="flex-1 bg-transparent text-right font-mono font-black text-lg outline-none text-slate-800" 
+                                                placeholder="0"
+                                            />
+                                        </div>
+
+                                        {/* ★ 新增：獨立 VIP 折扣欄位 (連動合約條款與總價) */}
+                                        <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-300 shadow-inner flex items-center mb-3">
+                                            <span className="text-xs font-bold text-amber-800 w-24">VIP 折扣</span>
+                                            <span className="text-amber-600 font-mono font-bold mr-1">- $</span>
+                                            <input 
+                                                name="vipDiscount" 
+                                                type="number" 
+                                                value={formData.vipDiscount || ''} 
+                                                onChange={handleChange} 
+                                                className="flex-1 bg-transparent text-right font-mono font-black text-base outline-none text-amber-700" 
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    </>
                                 )}
 
                                 <div className="space-y-2 mb-3">
