@@ -28,6 +28,8 @@ import {
 } from '@/config/constants';
 
 // --- 輔助工具函數 ---
+// ★ 財務精度保護：防止浮點數運算誤差
+const roundMoney = (val: number) => Math.round(((val || 0) + Number.EPSILON) * 100) / 100;
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
@@ -2224,8 +2226,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             licenseExpiry: formData.get('licenseExpiry') || '',
             registeredOwnerDate: formData.get('registeredOwnerDate') as string || '', 
             
-            price: getNum('price', true),
-            costPrice: getNum('costPrice', true),
+            price: roundMoney(getNum('price', true)),
+            vipDiscount: roundMoney(getNum('vipDiscount', true, (editingVehicle as any)?.vipDiscount)), // ★ 新增：儲存 VIP 折扣
+            costPrice: roundMoney(getNum('costPrice', true)),
             mileage: getNum('mileage', true),
             
             previousOwners: formData.get('previousOwners') || '', 
@@ -2431,7 +2434,8 @@ const deleteVehicle = async (id: string) => {
                 engineNo: v.engineNo || '', 
                 year: v.year || '',
                 price: v.price ? v.price.toString() : '0', 
-                docDate: payment.date,      
+                vipDiscount: (v as any).vipDiscount ? String((v as any).vipDiscount) : '', // ★ 同步帶入 VIP 折扣
+                docDate: payment.date,     
                 deliveryDate: payment.date, 
                 paymentMethod: payment.method || 'Cash',
                 remarks: payment.note || '',
@@ -2624,15 +2628,17 @@ const deleteVehicle = async (id: string) => {
       }
 
       if (car.status === 'Sold' || car.status === 'Reserved') {
-        const received = (car.payments || []).reduce((acc: any, p: any) => acc + (Number(p.amount) || 0), 0);
-        const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.isFree ? 0 : (Number(addon.amount) || 0)), 0);
-        const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
+        const received = roundMoney((car.payments || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0));
+        const salesAddonsTotal = roundMoney(((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.isFree ? 0 : (Number(addon.amount) || 0)), 0));
+        const maintCharge = roundMoney((car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0));
+        const vipDiscount = roundMoney(Number((car as any).vipDiscount) || 0);
         
-        const totalDue = Math.round((Number(car.price) || 0) + salesAddonsTotal + maintCharge);
-        const balance = totalDue - Math.round(received);
+        // ★ 應收總額 = 售價 - VIP折扣 + 附加費 + 未收維修費
+        const totalDue = roundMoney((Number(car.price) || 0) - vipDiscount + salesAddonsTotal + maintCharge);
+        const balance = roundMoney(totalDue - received);
         
-        if (balance > 0) totalReceivable += balance;
-        if (car.status === 'Sold') totalSoldThisMonth += Math.round(Number(car.price) || 0);
+        if (balance > 0) totalReceivable = roundMoney(totalReceivable + balance);
+        if (car.status === 'Sold') totalSoldThisMonth = roundMoney(totalSoldThisMonth + (Number(car.price) || 0) - vipDiscount);
       }
     });
 
@@ -2943,8 +2949,9 @@ const deleteVehicle = async (id: string) => {
                         })
                         .map((car) => { 
                         
-                        const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
-                        const balance = (car.price || 0) - received; 
+                        const received = roundMoney((car.payments || []).reduce((acc, p) => acc + (Number(p.amount) || 0), 0)); 
+                        const vipDiscount = roundMoney(Number((car as any).vipDiscount) || 0);
+                        const balance = roundMoney((car.price || 0) - vipDiscount - received); 
 
                     const getLogisticsBadge = (vehicleData: any) => {
                         const log = vehicleData.logistics || {};
