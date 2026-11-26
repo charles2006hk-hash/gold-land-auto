@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator, PenTool } from 'lucide-react';
+import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator, PenTool, Maximize2, Minimize2 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where, getDocs } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 import { calculateAutoLoan } from '@/utils/LoanCalculator'; 
@@ -129,6 +129,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
     const [sortMode, setSortMode] = useState<'created' | 'updated'>('created');
     const [isVehicleLocked, setIsVehicleLocked] = useState(false);
+    const [isPreviewExpanded, setIsPreviewExpanded] = useState(false); // ★ 新增：實時預覽放大核對狀態
 
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -138,6 +139,16 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     };
 
     const isAdmin = staffId === 'BOSS' || currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all');
+
+    // ★ 放大核對模式支援 ESC 鍵快速復原
+    useEffect(() => {
+        if (!isPreviewExpanded) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsPreviewExpanded(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isPreviewExpanded]);
 
     const [formData, setFormData] = useState({
         companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
@@ -927,11 +938,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             return () => resizeObserver.disconnect();
         }, []);
 
-        const dynamicScale = Math.min(containerWidth / 794, 1);
+        // ★ 放大核對時允許最高放大至 1.15 倍，方便檢查小字與條款
+        const dynamicScale = Math.min(containerWidth / 794, isPreviewExpanded ? 1.15 : 1);
 
         return (
-            <div ref={containerRef} className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start">
-                <div className="relative flex-shrink-0 transition-all duration-200" style={{ width: `${794 * dynamicScale}px`, height: `${1123 * dynamicScale}px` }}>
+            <div 
+                ref={containerRef} 
+                onClick={() => { if (isPreviewExpanded) setIsPreviewExpanded(false); }}
+                className={`w-full h-full overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start ${isPreviewExpanded ? 'bg-transparent' : 'bg-slate-200'}`}
+            >
+                <div 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isPreviewExpanded) setIsPreviewExpanded(true);
+                    }}
+                    title={isPreviewExpanded ? '核對模式 (按 ESC 或右上角復原)' : '點擊放大核對單據內容'}
+                    className={`relative flex-shrink-0 transition-all duration-200 ${!isPreviewExpanded ? 'cursor-zoom-in hover:ring-4 hover:ring-blue-400/50 rounded-sm' : ''}`}
+                    style={{ width: `${794 * dynamicScale}px`, height: `${1123 * dynamicScale}px` }}
+                >
                     <div className="bg-white shadow-2xl overflow-hidden box-border absolute top-0 left-0" style={{ width: '794px', height: '1123px', transform: `scale(${dynamicScale})`, transformOrigin: 'top left' }}>
                         <div className="p-6 font-sans text-slate-900 h-full pb-[25mm] relative box-border">
                             
@@ -2074,11 +2098,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                 </div>
 
-                <div className={`flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center p-4 relative ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
+                {/* ★ Live Preview 面板外層（支援全螢幕放大核對 / 復原） */}
+                <div 
+                    className={
+                        isPreviewExpanded
+                            ? 'fixed inset-0 z-[9990] bg-slate-900/90 backdrop-blur-sm flex flex-col overflow-hidden items-center p-3 md:p-6 animate-fade-in'
+                            : `flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center p-4 relative ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`
+                    }
+                >
                     
-                    <div className="w-full max-w-[800px] flex justify-between items-center mb-3 flex-none">
-                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center bg-white/80 px-3 py-1.5 rounded-full shadow-sm">
-                            <Eye size={14} className="mr-1.5 text-blue-600"/> Live Preview 實時預覽
+                    <div className={`w-full ${isPreviewExpanded ? 'max-w-[960px]' : 'max-w-[800px]'} flex justify-between items-center mb-3 flex-none gap-2`}>
+                        <div className="text-xs font-bold text-slate-600 uppercase tracking-widest flex items-center bg-white/95 px-3 py-1.5 rounded-full shadow-sm">
+                            <Eye size={14} className="mr-1.5 text-blue-600"/>
+                            {isPreviewExpanded ? '放大核對模式 (ESC 復原)' : 'Live Preview 實時預覽'}
                         </div>
                         
                         <div className="flex items-center gap-2">
@@ -2092,10 +2124,21 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 <span>{showStampAndSig ? '電子印章：顯示' : '電子印章：隱藏'}</span>
                             </button>
 
+                            {/* ★ 新增：一鍵放大 / 復原按鈕 */}
+                            <button
+                                type="button"
+                                onClick={() => setIsPreviewExpanded(!isPreviewExpanded)}
+                                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm cursor-pointer select-none active:scale-95 ${isPreviewExpanded ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' : 'bg-white hover:bg-blue-50 text-blue-700 border border-blue-200'}`}
+                                title={isPreviewExpanded ? '復原視窗' : '全螢幕放大核對'}
+                            >
+                                {isPreviewExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                                <span>{isPreviewExpanded ? '復原視窗' : '放大核對'}</span>
+                            </button>
+
                             <button 
                                 type="button"
                                 onClick={handlePrint}
-                                className="md:hidden bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer select-none"
+                                className={`${isPreviewExpanded ? 'flex' : 'md:hidden flex'} bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-full text-xs font-bold items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer select-none`}
                             >
                                 <Printer size={14} className="pointer-events-none" />
                                 <span>列印 / 輸出 PDF</span>
@@ -2107,29 +2150,31 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         <LivePreview />
                     </div>
 
-                    <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between print:hidden animate-fade-in">
-                        <div className="flex flex-col pl-1">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Action Required</span>
-                            <span className="text-xs font-black text-white">確認單據內容無誤？</span>
+                    {!isPreviewExpanded && (
+                        <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between print:hidden animate-fade-in">
+                            <div className="flex flex-col pl-1">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Action Required</span>
+                                <span className="text-xs font-black text-white">確認單據內容無誤？</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setMobileStep('edit')}
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer select-none transition-colors"
+                                >
+                                    返回修改
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handlePrint}
+                                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg cursor-pointer select-none active:scale-95 transition-transform"
+                                >
+                                    <Printer size={14} className="pointer-events-none" />
+                                    <span>確認並列印 PDF</span>
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setMobileStep('edit')}
-                                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer select-none transition-colors"
-                            >
-                                返回修改
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handlePrint}
-                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg cursor-pointer select-none active:scale-95 transition-transform"
-                            >
-                                <Printer size={14} className="pointer-events-none" />
-                                <span>確認並列印 PDF</span>
-                            </button>
-                        </div>
-                    </div>
+                    )}
 
                 </div>
             </div>
