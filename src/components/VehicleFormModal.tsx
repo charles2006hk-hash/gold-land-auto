@@ -25,6 +25,7 @@ const EQUIPMENT_DB: Record<string, string[]> = {
     'General': ['0手', '1手', '行貨', '水貨', '原廠保養', '牌費長', '直版任驗', '剛做大保養', '新車一樣', '無中港紀錄', '全原裝', '家庭車']
 };
 
+const roundMoney = (val: number) => Math.round(((val || 0) + Number.EPSILON) * 100) / 100;
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
 const formatNumberInput = (value: string) => {
@@ -361,6 +362,8 @@ const VehicleFormModal = ({
     const [newAcqPayment, setNewAcqPayment] = useState({ date: new Date().toISOString().split('T')[0], method: 'Transfer', amount: '', note: '' });
 
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
+    // ★ 新增：VIP 折扣狀態
+    const [vipDiscountStr, setVipDiscountStr] = useState(formatNumberInput(String((v as any).vipDiscount || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
     const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
@@ -387,9 +390,11 @@ const VehicleFormModal = ({
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
     const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + ((e.isIncludedInPrice || e.paymentMethod === 'Included') ? 0 : (e.amount || 0)), 0);
     const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
-    const currentRealTimePrice = Number(priceStr.replace(/,/g, '')) || 0;
-    const totalRevenue = currentRealTimePrice + salesAddonsTotal;
-    const balance = totalRevenue - totalReceived;
+    const currentRealTimePrice = roundMoney(Number(priceStr.replace(/,/g, '')) || 0);
+    const vipDiscountAmt = roundMoney(Number(vipDiscountStr.replace(/,/g, '')) || 0);
+    // ★ 總應收 = 目標售價 - VIP 折扣 + 附加費
+    const totalRevenue = roundMoney(currentRealTimePrice - vipDiscountAmt + salesAddonsTotal);
+    const balance = roundMoney(totalRevenue - totalReceived);
 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
@@ -2071,8 +2076,14 @@ const VehicleFormModal = ({
                         
                         {/* 📌 極簡精緻化總結條 (吸頂) */}
                         <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-5 mt-[-1rem] md:mt-[-1.5rem]">
-                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
+                            <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
                                 <span>車價 <span className="font-bold text-slate-800">{formatCurrency(currentRealTimePrice)}</span></span>
+                                {vipDiscountAmt > 0 && (
+                                    <>
+                                        <span className="text-slate-300">-</span>
+                                        <span>VIP折扣 <span className="font-bold text-amber-600">{formatCurrency(vipDiscountAmt)}</span></span>
+                                    </>
+                                )}
                                 <span className="text-slate-300">+</span>
                                 <span>附加費 <span className="font-bold text-indigo-600">{formatCurrency(salesAddonsTotal)}</span></span>
                                 <span className="text-slate-300">=</span>
@@ -2142,12 +2153,26 @@ const VehicleFormModal = ({
                                 <h3 className="font-bold text-slate-800 text-xs flex items-center"><DollarSign size={14} className="mr-1.5 text-emerald-600"/> 售價與稅項 (Pricing)</h3>
                                 <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded shadow-sm border">牌簿登記價: {calcRegisteredPrice()}</span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-slate-100 p-px">
-                                <div className="bg-amber-50/50 p-2 md:col-span-2 group">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-100 p-px">
+                                <div className="bg-amber-50/50 p-2 group">
                                     <label className={COMPACT_LABEL}>目標售價 (Sell Price HKD)</label>
-                                    <input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full h-10 px-3 bg-white border-2 border-amber-300 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 rounded-lg text-xl font-black text-slate-900 outline-none font-mono transition-all" placeholder="$0"/>
+                                    <input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full h-10 px-3 bg-white border-2 border-amber-300 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 rounded-lg text-lg font-black text-slate-900 outline-none font-mono transition-all" placeholder="$0"/>
                                 </div>
-                                <div className="bg-white p-2">
+                                {/* ★ 新增：VIP 折扣 (與目標售價並列，name="vipDiscount" 供 saveVehicle 抓取) */}
+                                <div className="bg-orange-50/60 p-2 group">
+                                    <label className={COMPACT_LABEL + " text-amber-700"}>VIP 折扣 (Discount)</label>
+                                    <div className="relative flex items-center">
+                                        <span className="absolute left-2.5 text-amber-600 font-mono font-black text-sm">-</span>
+                                        <input
+                                            name="vipDiscount"
+                                            value={vipDiscountStr}
+                                            onChange={e => setVipDiscountStr(formatNumberInput(e.target.value))}
+                                            className="w-full h-10 pl-6 pr-3 bg-white border-2 border-amber-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 rounded-lg text-lg font-black text-amber-700 outline-none font-mono transition-all text-right"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="bg-white p-2 flex flex-col justify-center">
                                     <label className={COMPACT_LABEL}>A1 Tax (首次登記稅值)</label>
                                     <input 
                                         name="priceA1" value={priceA1Str} 
@@ -2161,7 +2186,7 @@ const VehicleFormModal = ({
                                         className={COMPACT_INPUT + " font-mono text-slate-600"}
                                     />
                                 </div>
-                                <div className="bg-white p-2">
+                                <div className="bg-white p-2 flex flex-col justify-center">
                                     <label className={COMPACT_LABEL}>Paid Tax (已繳稅款)</label>
                                     <input name="priceTax" value={priceTaxStr} onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} className={COMPACT_INPUT + " font-mono text-slate-600"}/>
                                 </div>
@@ -3225,7 +3250,7 @@ const VehicleFormModal = ({
                             </h3>
 
                             {(() => {
-                                const currentPrice = Number(priceStr.replace(/,/g, '')) || 0;
+                                const currentPrice = roundMoney((Number(priceStr.replace(/,/g, '')) || 0) - vipDiscountAmt);
                                 const currentPaid = (v.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
                                 
                                 const displayFinPrice = financePriceInput !== '' ? Number(financePriceInput.replace(/,/g, '')) : currentPrice;
