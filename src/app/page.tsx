@@ -1381,12 +1381,28 @@ useEffect(() => {
       if (printRoot) {
           let fileName = 'Vehicle_Document';
           if (previewDoc && previewDoc.vehicle) {
-              const v = previewDoc.vehicle;
-              const reg = v.regMark && v.regMark !== 'TBC' ? v.regMark : '未出牌';
-              const yr = v.year || '';
-              const mk = v.make || '';
-              const md = v.model || '';
-              fileName = `${reg}_${yr}_${mk}_${md}`.replace(/\s+/g, '_');
+              const v: any = previewDoc.vehicle;
+              if (v.customFileName) {
+                  // ★ 優先使用開單系統組合好的「單據類型 + 版本號」檔名
+                  fileName = v.customFileName;
+              } else {
+                  const typeMap: Record<string, string> = {
+                      sales_contract: 'Sales_Contract',
+                      purchase_contract: 'Purchase_Contract',
+                      consignment_contract: 'Consignment',
+                      quotation: 'Quotation',
+                      invoice: 'Invoice',
+                      service_invoice: 'Service_Invoice',
+                      receipt: 'Receipt'
+                  };
+                  const prefix = typeMap[previewDoc.type] || 'Document';
+                  const reg = v.regMark && v.regMark !== 'TBC' ? v.regMark : '未出牌';
+                  const ver = v.docVersion || 1;
+                  fileName = [prefix, reg, v.year, v.make, v.model, `v${ver}`]
+                      .filter(Boolean)
+                      .join('_')
+                      .replace(/[\\/:*?"<>|\s]+/g, '_');
+              }
           }
           triggerSmartPrint(printRoot.outerHTML, fileName);
       }
