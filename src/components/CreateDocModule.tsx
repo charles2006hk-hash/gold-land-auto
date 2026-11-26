@@ -122,6 +122,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [docHistory, setDocHistory] = useState<any[]>([]);
     const [mobileStep, setMobileStep] = useState<'list' | 'edit' | 'preview'>('list');
     const [docId, setDocId] = useState<string | null>(null);
+    const [docVersion, setDocVersion] = useState<number>(1); // ★ 單據版本號 (v1, v2...)
     const [selectedDocType, setSelectedDocType] = useState('sales_contract');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
@@ -280,6 +281,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     useEffect(() => {
         if (externalRequest) {
             setDocId(externalRequest.id);
+            setDocVersion(Number(externalRequest.version) || 1);
             setSelectedDocType(externalRequest.type);
             const newFormData = { vipDiscount: '', ...externalRequest.formData };
             if (!newFormData.docDate) newFormData.docDate = new Date().toISOString().split('T')[0];
@@ -364,10 +366,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
     }, [selectedDocType]);
 
-    const startNewDoc = () => { setDocId(null); handleSelectBlank(); setViewMode('edit'); };
+    const startNewDoc = () => { setDocId(null); setDocVersion(1); handleSelectBlank(); setViewMode('edit'); };
 
     const editDoc = (doc: any) => {
         setDocId(doc.id);
+        setDocVersion(Number(doc.version) || 1);
         setSelectedDocType(doc.type);
         const newFormData = { vipDiscount: '', ...doc.formData };
         if (!newFormData.docDate) newFormData.docDate = doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -436,6 +439,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         });
 
         setDocId(null); 
+        setDocVersion(1);
         setSelectedDocType(docsToMerge[0].type);
         setSelectedCarId('BLANK'); 
         setIsVehicleLocked(false);
@@ -484,8 +488,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             }
         }
 
+        // ★ 新增單據為 v1，修改既有單據則版本號 +1
+        const nextVersion = docId ? docVersion + 1 : 1;
         const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
-        const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, showAttachments, updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId };
+        const docData = { 
+            type: selectedDocType, 
+            version: nextVersion, // ★ 寫入版本號至 Firestore
+            formData, checklist, docItems, depositItems, showTerms, showStampAndSig, showAttachments, 
+            updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId 
+        };
 
         try {
             let currentId = docId;
@@ -495,6 +506,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); 
                 setDocId(ref.id); currentId = ref.id;
             }
+            setDocVersion(nextVersion);
             
             if (formData.customerName && formData.customerName.trim() !== '') {
                 const customerName = formData.customerName.trim();
@@ -577,7 +589,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             }
             
             alert("✅ 單據已成功儲存\n(客戶資料已同步更新至資料庫中心)");
-            return currentId; 
+            return { id: currentId, version: nextVersion };
         } catch (e) { console.error(e); alert("儲存失敗"); return null; }
     };
 
@@ -753,9 +765,32 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     };
 
     const handlePrint = async () => {
-        const finalId = await saveDocRecord();
+        const saved = await saveDocRecord();
+        const finalId = saved?.id || docId || 'DRAFT';
+        const finalVersion = saved?.version || docVersion || 1;
+
+        const typeMap: Record<string, string> = {
+            'sales_contract': 'Sales_Contract', 
+            'purchase_contract': 'Purchase_Contract', 
+            'consignment_contract': 'Consignment', 
+            'quotation': 'Quotation', 
+            'invoice': 'Invoice', 
+            'service_invoice': 'Service_Invoice', 
+            'receipt': 'Receipt'
+        };
+        const prefix = typeMap[selectedDocType] || 'Document';
+        const reg = formData.regMark && formData.regMark !== 'TBC' ? formData.regMark : '未出牌';
+        
+        // ★ 組合標準化檔名：單據類型_車牌_年份_廠牌_型號_v版本號 (過濾非法字元)
+        const rawName = [prefix, reg, formData.year, formData.make, formData.model, `v${finalVersion}`]
+            .filter(Boolean)
+            .join('_');
+        const fileName = rawName.replace(/[\\/:*?"<>|\s]+/g, '_');
+
         const dummyVehicle: any = {
-            id: finalId || docId || 'DRAFT', 
+            id: finalId,
+            docVersion: finalVersion,     // ★ 傳遞版本號
+            customFileName: fileName,     // ★ 傳遞完整輸出檔名給 page.tsx
             ...formData, 
             customerSignature: formData.customerSignature, 
             photos: showPhotos ? (formData.contractPhotos || []) : [], 
@@ -780,22 +815,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             companyPhone: formData.companyPhone, 
             paymentMethod: formData.paymentMethod 
         };
-        const typeMap: Record<string, string> = {
-            'sales_contract': 'Sales_Contract', 
-            'purchase_contract': 'Purchase_Contract', 
-            'consignment_contract': 'Consignment', 
-            'quotation': 'Quotation', 
-            'invoice': 'Invoice', 
-            'service_invoice': 'Service_Invoice', 
-            'receipt': 'Receipt'
-        };
-        const prefix = typeMap[selectedDocType] || 'Document';
-        const fileName = `${prefix}_${formData.year || ''} ${formData.make || ''} ${formData.model || ''}`.replace(/\s+/g, ' ').trim();
         
         const originalTitle = document.title;
         document.title = fileName;
 
-        openPrintPreview(selectedDocType, dummyVehicle, fileName);
+        openPrintPreview(selectedDocType, dummyVehicle);
 
         const restoreTitle = () => { 
             document.title = originalTitle; 
@@ -1624,6 +1648,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 <div className={`w-full md:w-[40%] bg-white rounded-xl shadow-sm border border-slate-200 flex-col overflow-hidden ${mobileStep === 'edit' ? 'flex' : 'hidden md:flex'}`}>
                     <div className="p-3 border-b bg-slate-50 flex justify-between items-center shadow-sm z-10">
                         <span className="font-bold text-slate-700 text-sm">{docId ? '✏️ 編輯單據' : '📝 新增單據'}</span>
+                        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-mono bg-blue-100 text-blue-700 rounded">v{docVersion}</span>
                         <div className="flex gap-2">
                             <button type="button" onClick={() => setShowSignaturePad(true)} className="px-3 py-1.5 bg-yellow-500 text-yellow-950 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform hover:bg-yellow-400">
                                 <PenTool size={14} className="mr-1"/> 電子簽署
