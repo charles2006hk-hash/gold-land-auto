@@ -77,6 +77,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     };
 
     const price = roundCurrency(Number(String(activeVehicle.price).replace(/,/g, '')) || 0);
+    const vipDiscount = roundCurrency(Number(String((activeVehicle as any).vipDiscount || 0).replace(/,/g, '')) || 0);
     const ovFee = roundCurrency(Number(String((activeVehicle as any).overseasTotalFee).replace(/,/g, '')) || 0);
     const hkFee = roundCurrency(Number(String((activeVehicle as any).localTotalFee).replace(/,/g, '')) || 0);
     const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? roundCurrency(ovFee + hkFee) : 0;
@@ -91,7 +92,9 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0)
     );
     
-    const balance = roundCurrency(basePrice + extrasTotal - totalPaid);
+    // ★ 成交總價 (已扣除 VIP 折扣) 與 應付尾數
+    const netTotalPrice = roundCurrency(basePrice + extrasTotal - vipDiscount);
+    const balance = roundCurrency(netTotalPrice - totalPaid);
     const deposit = totalPaid;
 
     // ★ 統一格式化每筆收款的「支付方式」與「備註」(支援所有單據類型)
@@ -310,6 +313,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                     {itemsToRender.map((item: any, i: number) => (
                                         <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                     ))}
+                                    {/* ★ 新增：VIP 專屬折扣列 */}
+                                    {vipDiscount > 0 && (
+                                        <tr className="border-b text-amber-700 bg-amber-50/40">
+                                            <td className="border p-1 font-bold pl-4">Less: VIP Discount (VIP 專屬折扣)</td>
+                                            <td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(vipDiscount)}</td>
+                                        </tr>
+                                    )}
                                     {depositItems.map((item: any, idx: number) => (
                                         <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
                                             <td className="border p-1 font-bold pl-4">
@@ -477,6 +487,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                             {itemsToRender.map((item: any, i: number) => (
                                                 <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                             ))}
+                                            {/* ★ 新增：VIP 專屬折扣列 */}
+                                            {vipDiscount > 0 && (
+                                                <tr className="border-b text-amber-700 bg-amber-50/40">
+                                                    <td className="p-1 font-bold pl-4">Less: VIP Discount (VIP 專屬折扣)</td>
+                                                    <td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(vipDiscount)}</td>
+                                                </tr>
+                                            )}
                                             {depositItems.map((item: any, idx: number) => (
                                                 <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
                                                     <td className="p-1 font-bold pl-4">
@@ -519,8 +536,9 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                         ) : (
                             <>
-                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(roundCurrency(balance + deposit))}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
-                                本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(roundCurrency(balance + deposit))}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                {/* ★ 合約條款自動連動折後總價與 VIP 折扣說明 */}
+                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(netTotalPrice)}</b> (Total{vipDiscount > 0 ? `, after VIP Discount of ${formatCurrency(vipDiscount)}` : ''}) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(netTotalPrice)}</b>{vipDiscount > 0 ? `（已扣除 VIP 折扣 ${formatCurrency(vipDiscount)}）` : ''} {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                 
                                 {activeType === 'purchase_contract' && showPurchaseGuarantees && (
                                     <div className="mt-1.5 pt-1.5 border-t border-slate-300">
